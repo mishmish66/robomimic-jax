@@ -32,7 +32,11 @@
             "horizon": 400,
             "rate": 50,
             "warmstart": 0,
-            "terminate_on_success": true
+            "terminate_on_success": true,
+            "mjx": {
+                "enabled": false,
+                "num_envs": 50
+            }
         },
         "env_meta_update_dict": {},
         "ckpt_path": null

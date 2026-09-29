@@ -66,6 +66,8 @@ $ cd robomimic
 $ pip install -e .
 ```
 
+With [uv](https://docs.astral.sh/uv/), `uv sync` creates the environment instead. `uv sync --extra robosuite` adds robosuite, and `uv sync --extra mjx` adds robosuite, MuJoCo MJX, and JAX for batched evaluation rollouts (`config.experiment.rollout.mjx.enabled = True`).
+
 </p>
 </details>
 

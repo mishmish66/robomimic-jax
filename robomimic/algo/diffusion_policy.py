@@ -275,30 +275,27 @@ class DiffusionPolicyUNet(PolicyAlgo):
         Get policy action outputs.
 
         Args:
-            obs_dict (dict): current observation [1, Do]
+            obs_dict (dict): current observation [B, Do]
             goal_dict (dict): (optional) goal
 
         Returns:
-            action (torch.Tensor): action tensor [1, Da]
+            action (torch.Tensor): action tensor [B, Da]
         """
-        # obs_dict: key: [1,D]
+        # obs_dict: key: [B,D]
         To = self.algo_config.horizon.observation_horizon
         Ta = self.algo_config.horizon.action_horizon
         
         if len(self.action_queue) == 0:
             # no actions left, run inference
-            # [1,T,Da]
+            # [B,T,Da]
             action_sequence = self._get_action_trajectory(obs_dict=obs_dict)
             
             # put actions into the queue
-            self.action_queue.extend(action_sequence[0])
+            self.action_queue.extend(action_sequence.transpose(0, 1))
         
         # has action, execute from left to right
-        # [Da]
+        # [B,Da]
         action = self.action_queue.popleft()
-        
-        # [1,Da]
-        action = action.unsqueeze(0)
         return action
         
     def _get_action_trajectory(self, obs_dict, goal_dict=None):

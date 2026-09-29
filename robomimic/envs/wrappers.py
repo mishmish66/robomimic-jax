@@ -113,6 +113,10 @@ class FrameStackWrapper(EnvWrapper):
         super(FrameStackWrapper, self).__init__(env=env)
         self.num_frames = num_frames
 
+        # batched envs stack frames along the axis after the batch dimension
+        self.num_envs = getattr(env, "num_envs", None)
+        self._stack_axis = 0 if self.num_envs is None else 1
+
         # keep track of last @num_frames observations for each obs key
         self.obs_history = None
 
@@ -128,7 +132,7 @@ class FrameStackWrapper(EnvWrapper):
         obs_history = {}
         for k in init_obs:
             obs_history[k] = deque(
-                [init_obs[k][None] for _ in range(self.num_frames)], 
+                [np.expand_dims(init_obs[k], self._stack_axis) for _ in range(self.num_frames)], 
                 maxlen=self.num_frames,
             )
         return obs_history
@@ -140,7 +144,7 @@ class FrameStackWrapper(EnvWrapper):
         @self.num_frames.
         """
         # concatenate all frames per key so we return a numpy array per key
-        return { k : np.concatenate(self.obs_history[k], axis=0) for k in self.obs_history }
+        return { k : np.concatenate(self.obs_history[k], axis=self._stack_axis) for k in self.obs_history }
 
     def cache_obs_history(self):
         self.obs_history_cache = deepcopy(self.obs_history)
@@ -201,19 +205,20 @@ class FrameStackWrapper(EnvWrapper):
         self.update_obs(obs, action=action, reset=False)
         # update frame history
         for k in obs:
-            # make sure to have leading dim of 1 for easy concatenation
-            self.obs_history[k].append(obs[k][None])
+            # add a frame dimension for concatenation
+            self.obs_history[k].append(np.expand_dims(obs[k], self._stack_axis))
         obs_ret = self._get_stacked_obs_from_history()
         return obs_ret, r, done, info
 
     def update_obs(self, obs, action=None, reset=False):
-        obs["timesteps"] = np.array([self.timestep])
+        batch_shape = () if self.num_envs is None else (self.num_envs,)
+        obs["timesteps"] = np.full(batch_shape + (1,), self.timestep)
         
         if reset:
-            obs["actions"] = np.zeros(self.env.action_dimension)
+            obs["actions"] = np.zeros(batch_shape + (self.env.action_dimension,))
         else:
             self.timestep += 1
-            obs["actions"] = action[: self.env.action_dimension]
+            obs["actions"] = action[..., : self.env.action_dimension]
 
     def _to_string(self):
         """Info to pretty print."""

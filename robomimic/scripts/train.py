@@ -27,6 +27,7 @@ import socket
 import traceback
 
 from collections import OrderedDict
+from copy import deepcopy
 
 import torch
 from torch.utils.data import DataLoader
@@ -38,6 +39,7 @@ import robomimic.utils.obs_utils as ObsUtils
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.lang_utils as LangUtils
+import robomimic.envs.env_base as EB
 from robomimic.config import config_factory
 from robomimic.algo import algo_factory, RolloutPolicy
 from robomimic.utils.log_utils import PrintLogger, DataLogger, flush_warnings
@@ -140,8 +142,13 @@ def train(config, device, resume=False):
 
             # create environment for each env_name
             def create_env(env_name):
+                rollout_env_meta = env_meta
+                if config.experiment.rollout.mjx.enabled:
+                    rollout_env_meta = deepcopy(env_meta)
+                    rollout_env_meta["type"] = EB.EnvType.MJX_TYPE
+                    rollout_env_meta["env_kwargs"]["num_envs"] = config.experiment.rollout.mjx.num_envs
                 env_kwargs = dict(
-                    env_meta=env_meta,
+                    env_meta=rollout_env_meta,
                     env_name=env_name,
                     render=False,
                     render_offscreen=config.experiment.render_video,

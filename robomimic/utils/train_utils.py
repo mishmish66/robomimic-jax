@@ -389,6 +389,99 @@ def run_rollout(
     return results
 
 
+def run_batched_rollout(
+        policy,
+        env,
+        horizon,
+        use_goals=False,
+        video_writer=None,
+        video_skip=5,
+        terminate_on_success=False,
+    ):
+    """
+    Runs one rollout in each member of a batched environment (an env with a @num_envs attribute,
+    whose observations, rewards, and success flags carry a leading batch dimension).
+    Each episode ends at its first done flag, divergence, or (if @terminate_on_success) success;
+    later steps of that episode are ignored while the rest of the batch keeps running.
+
+    Args:
+        policy (RolloutPolicy instance): policy to use for rollouts.
+
+        env (EnvBase instance): batched environment to use for rollouts.
+
+        horizon (int): maximum number of steps to roll the agent out for
+
+        use_goals (bool): if True, agent is goal-conditioned, so provide goal observations from env
+
+        video_writer (imageio Writer instance): if not None, use video writer object to append frames of
+            batch member 0 at rate given by @video_skip
+
+        video_skip (int): how often to write video frame
+
+        terminate_on_success (bool): if True, end each episode as soon as a success is encountered
+
+    Returns:
+        results (list): one dictionary per batch member containing return, success rate, etc.
+    """
+    assert isinstance(policy, RolloutPolicy)
+    assert isinstance(env, EnvBase) or isinstance(env, EnvWrapper)
+    num_envs = env.num_envs
+
+    policy.start_episode()
+
+    ob_dict = env.reset()
+    goal_dict = None
+    if use_goals:
+        goal_dict = env.get_goal()
+
+    returns = np.zeros(num_envs)
+    end_step = np.full(num_envs, horizon - 1)
+    active = np.ones(num_envs, dtype=bool)
+    diverged = np.zeros(num_envs, dtype=bool)
+    success = None
+    video_frames = []
+
+    for step_i in range(horizon):
+        ac = policy(ob=ob_dict, goal=goal_dict, batched_ob=True)
+        ob_dict, r, done, info = env.step(ac)
+
+        returns += np.where(active, r, 0.)
+        cur_success_metrics = env.is_success()
+        if success is None:
+            success = { k : np.zeros(num_envs, dtype=bool) for k in cur_success_metrics }
+        for k in success:
+            success[k] |= active & cur_success_metrics[k]
+
+        if (video_writer is not None) and active[0]:
+            if step_i % video_skip == 0:
+                video_frames.append(env.render(mode="rgb_array", height=512, width=512))
+
+        cur_diverged = np.asarray(info.get("diverged", np.zeros(num_envs, dtype=bool)))
+        diverged |= active & cur_diverged
+        finished = active & (done | cur_diverged | (terminate_on_success & success["task"]))
+        end_step[finished] = step_i
+        active &= ~finished
+        if not active.any():
+            break
+
+    if video_writer is not None:
+        for frame in video_frames:
+            video_writer.append_data(frame)
+
+    results = []
+    for i in range(num_envs):
+        res = OrderedDict()
+        res["Return"] = returns[i]
+        res["Horizon"] = end_step[i] + 1
+        res["Success_Rate"] = float(success["task"][i] and not diverged[i])
+        res["Diverged"] = float(diverged[i])
+        for k in success:
+            if k != "task":
+                res["{}_Success_Rate".format(k)] = float(success[k][i] and not diverged[i])
+        results.append(res)
+    return results
+
+
 def rollout_with_stats(
         policy,
         envs,
@@ -474,31 +567,58 @@ def rollout_with_stats(
             env_name, horizon, use_goals, num_episodes,
         ))
         rollout_logs = []
-        iterator = range(num_episodes)
-        if not verbose:
-            iterator = LogUtils.custom_tqdm(iterator, total=num_episodes)
-
         num_success = 0
-        for ep_i in iterator:
-            rollout_timestamp = time.time()
-            rollout_info = run_rollout(
-                policy=policy,
-                env=env,
-                horizon=horizon,
-                render=render,
-                use_goals=use_goals,
-                video_writer=env_video_writer,
-                video_skip=video_skip,
-                terminate_on_success=terminate_on_success,
-            )
-            rollout_info["time"] = time.time() - rollout_timestamp
+        if getattr(env, "num_envs", None) is not None:
+            num_batches = int(np.ceil(num_episodes / env.num_envs))
+            iterator = range(num_batches)
+            if not verbose:
+                iterator = LogUtils.custom_tqdm(iterator, total=num_batches)
+            for batch_i in iterator:
+                rollout_timestamp = time.time()
+                batch_info = run_batched_rollout(
+                    policy=policy,
+                    env=env,
+                    horizon=horizon,
+                    use_goals=use_goals,
+                    video_writer=env_video_writer,
+                    video_skip=video_skip,
+                    terminate_on_success=terminate_on_success,
+                )
+                batch_info = batch_info[:num_episodes - len(rollout_logs)]
+                batch_time = time.time() - rollout_timestamp
+                for rollout_info in batch_info:
+                    rollout_info["time"] = batch_time / len(batch_info)
+                    rollout_logs.append(rollout_info)
+                    num_success += rollout_info["Success_Rate"]
 
-            rollout_logs.append(rollout_info)
-            num_success += rollout_info["Success_Rate"]
-            
-            if verbose:
-                print("Episode {}, horizon={}, num_success={}".format(ep_i + 1, horizon, num_success))
-                print(json.dumps(rollout_info, sort_keys=True, indent=4))
+                if verbose:
+                    print("Batch {}, episodes={}, horizon={}, num_success={}".format(
+                        batch_i + 1, len(rollout_logs), horizon, num_success))
+        else:
+            iterator = range(num_episodes)
+            if not verbose:
+                iterator = LogUtils.custom_tqdm(iterator, total=num_episodes)
+
+            for ep_i in iterator:
+                rollout_timestamp = time.time()
+                rollout_info = run_rollout(
+                    policy=policy,
+                    env=env,
+                    horizon=horizon,
+                    render=render,
+                    use_goals=use_goals,
+                    video_writer=env_video_writer,
+                    video_skip=video_skip,
+                    terminate_on_success=terminate_on_success,
+                )
+                rollout_info["time"] = time.time() - rollout_timestamp
+
+                rollout_logs.append(rollout_info)
+                num_success += rollout_info["Success_Rate"]
+                
+                if verbose:
+                    print("Episode {}, horizon={}, num_success={}".format(ep_i + 1, horizon, num_success))
+                    print(json.dumps(rollout_info, sort_keys=True, indent=4))
 
         if video_dir is not None:
             # close this env's video writer (next env has it's own)

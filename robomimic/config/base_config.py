@@ -120,6 +120,8 @@ class BaseConfig(Config):
         self.experiment.rollout.rate = 50                           # do rollouts every @rate epochs
         self.experiment.rollout.warmstart = 0                       # number of epochs to wait before starting rollouts
         self.experiment.rollout.terminate_on_success = True         # end rollout early after task success
+        self.experiment.rollout.mjx.enabled = False                 # run rollouts as a batch in MuJoCo MJX (robosuite low-dim tasks only)
+        self.experiment.rollout.mjx.num_envs = 50                   # number of rollouts simulated in parallel under MJX
 
         # for updating the evaluation env meta data
         self.experiment.env_meta_update_dict = Config()
