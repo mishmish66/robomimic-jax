@@ -1,10 +1,12 @@
 """
 Add the POMDP's observations of each recorded state to a dataset: "obs" (before each action) and "next_obs"
 (after it), as in the robomimic low_dim datasets. The state after the last action is not recorded, so the
-last "next_obs" observes the simulated outcome of the last action.
+last "next_obs" observes the simulated outcome of the last action. With --npz, the dataset is first written
+from demos packed by `robomimic.datasets.pack_demos`.
 
-Example:
+Examples:
     python add_observations.py --dataset ~/data/robomimic_warp/lift/ph/demo_v15.hdf5
+    python add_observations.py --npz datasets/warp/lift_ph.npz --dataset ~/data/robomimic_warp/lift/ph/low_dim_v15.hdf5
 """
 import argparse
 import json
@@ -16,6 +18,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
+from robomimic.datasets import unpack_demos
 from robomimic.pomdp import TASK_OF_ENV_NAME, RobomimicPOMDP
 
 
@@ -30,10 +33,10 @@ class Observer:
 
         def outcome(states, actions):
             """Flattened state after the last of @actions, taken from the last of @states."""
-            grip = jnp.zeros((len(env._arms), 2), jnp.float32)
+            grip = jnp.zeros((len(env.arms), 2), jnp.float32)
             for action in actions[:-1]:
-                grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(env._arms, grip)])
-            q0 = tuple(states[0][1:][arm.qpos] for arm in env._arms)
+                grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(env.arms, grip)])
+            q0 = tuple(states[0][1:][arm.qpos] for arm in env.arms)
             state = env.state_from_flat(states[-1])._replace(grip=grip, q0=q0)
             d = env.step(None, state, actions[-1]).data
             return jnp.concatenate([d.time[None], d.qpos, d.qvel])
@@ -53,6 +56,8 @@ class Observer:
 
 
 def main(args):
+    if args.npz:
+        unpack_demos(args.npz, args.dataset)
     with h5py.File(Path(args.dataset).expanduser(), "a") as f:
         task = TASK_OF_ENV_NAME[json.loads(f["data"].attrs["env_args"])["env_name"]]
         names = sorted(f["data"], key=lambda k: int(k.removeprefix("demo_")))
@@ -79,5 +84,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, help="hdf5 dataset with recorded states")
+    parser.add_argument("--npz", help="packed demos to write to --dataset first")
     parser.add_argument("--batch", type=int, default=256, help="states observed together")
     main(parser.parse_args())

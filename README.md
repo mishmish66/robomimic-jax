@@ -35,6 +35,18 @@ uv run pytest tests
 Datasets download to `$ROBOMIMIC_DATA` (default `~/data/robomimic_v15`). Tests on the full task datasets look for
 `$ROBOMIMIC_DATA/<task>/<ph|mh>/demo_v15.hdf5` and `low_dim_v15.hdf5` and skip tasks without them.
 
+## Transferred demonstrations
+
+`datasets/warp/` holds the robomimic v1.5 demonstrations re-simulated in this POMDP, every demo successful and
+matching the original demo for demo (`lift_ph`, `can_ph`, `square_mh`, `transport_ph`, `tool_hang_ph`). They
+were made by `robomimic/scripts/transfer_demos.py`, which tracks each recorded trajectory by sampling
+perturbations of its actions. Each file packs states, actions, rewards, masks, and models; to get a robomimic
+low_dim dataset with `obs` and `next_obs`:
+
+```sh
+uv run python robomimic/scripts/add_observations.py --npz datasets/warp/lift_ph.npz --dataset lift_ph_warp.hdf5
+```
+
 ## License
 
 MIT (robomimic). The models, meshes and textures in `robomimic/data/models.zip` come from robosuite (MIT; its license is in the archive).

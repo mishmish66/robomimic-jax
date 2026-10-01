@@ -25,7 +25,7 @@ import warp as wp
 from mujoco import mjx
 
 import robomimic.pomdp
-from robomimic.pomdp import TASK_OF_ENV_NAME, RobomimicPOMDP, load_model
+from robomimic.pomdp import TASK_OF_ENV_NAME, RobomimicPOMDP, _park, load_model
 
 # parked objects are those farther than this from the world origin
 _PARKED_DISTANCE = 5.
@@ -79,15 +79,16 @@ _CONTACT_SUCCESS = {"transport": (("target_bin_geoms", "payload_geoms"), ("trash
 
 class Transfer:
     """Jitted transfer of batches of demos, each in its own model of the same task."""
-    def __init__(self, env, first_state, samples, horizon, commit, iterations, graph_mode):
-        self.env, self.samples, self.horizon, self.commit = env, samples, horizon, commit
+    def __init__(self, task, env, first_state, samples, horizon, commit, iterations, graph_mode, refine=0,
+                 tolerance=1.):
+        self.task, self.env, self.samples, self.horizon, self.commit = task, env, samples, horizon, commit
         self._graph_mode = graph_mode
         self._tree = jax.tree_util.tree_structure(env._mx)
-        nq = env._cpu_model.nq
-        positions, quaternions, joints = _tracked_qpos(env._cpu_model, first_state)
+        nq = env.model.nq
+        positions, quaternions, joints = _tracked_qpos(env.model, first_state)
         action_dim = env.action_space.shape[0]
         arm_dims = np.zeros(action_dim, np.float32)
-        for arm in env._arms:
+        for arm in env.arms:
             arm_dims[arm.arm_action] = 1.
 
         def rollout(flat, grip, q0, actions):
@@ -118,19 +119,36 @@ class Transfer:
             def chunk(carry, c):
                 flat, key = carry
                 t = c * commit
-                mean = jax.lax.dynamic_slice_in_dim(actions, t, horizon)
                 targets = jax.lax.dynamic_slice_in_dim(states, t + 1, horizon)
                 mask = (t + jnp.arange(horizon) < length).astype(jnp.float32)
-                for i in range(iterations):
+
+                def search(key, mean, scale):
+                    """Best of `samples` perturbations of `mean`, one of which is `mean` itself."""
                     key, sub = jax.random.split(key)
-                    perturbation = noise * 0.5 ** i * jax.random.normal(sub, (samples, horizon, action_dim)) * arm_dims
+                    perturbation = scale * jax.random.normal(sub, (samples, horizon, action_dim)) * arm_dims
                     candidates = jnp.clip(mean + perturbation.at[0].set(0.), -1., 1.)
                     flats, success, reward = jax.vmap(rollout, in_axes=(None, None, None, 0))(flat, grips[t], q0, candidates)
                     costs = cost(flats, targets, mask)
                     best = jnp.argmin(jnp.where(jnp.isnan(costs), jnp.inf, costs))
-                    mean = candidates[best]
-                kept = (flats[best, :commit], mean[:commit], reward[best, :commit], success[best, :commit])
-                return (flats[best, commit - 1], key), kept
+                    return key, (costs[best], candidates[best], flats[best], success[best], reward[best])
+
+                key, best = search(key, jax.lax.dynamic_slice_in_dim(actions, t, horizon), noise)
+                for i in range(1, iterations):
+                    key, best = search(key, best[1], noise * 0.5 ** i)
+
+                # chunks that still drift are searched again at growing noise around the best so far
+                def drifting(loop):
+                    r, _, best = loop
+                    return (r < refine) & (best[0] > tolerance * mask.sum())
+
+                def again(loop):
+                    r, key, best = loop
+                    key, best = search(key, best[1], noise * 1.5 ** (r + 1))
+                    return r + 1, key, best
+
+                _, key, (_, chosen, flats, success, reward) = jax.lax.while_loop(drifting, again, (0, key, best))
+                kept = (flats[:commit], chosen[:commit], reward[:commit], success[:commit])
+                return (flats[commit - 1], key), kept
             chunks = (actions.shape[0] - horizon) // commit
             _, outputs = jax.lax.scan(chunk, (states[0], key), jnp.arange(chunks))
             return tuple(x.reshape(-1, *x.shape[2:]) for x in outputs)
@@ -139,16 +157,16 @@ class Transfer:
 
     def _grips(self, actions):
         """Gripper controller state before each action."""
-        grips = [np.zeros((len(self.env._arms), 2), np.float32)]
+        grips = [np.zeros((len(self.env.arms), 2), np.float32)]
         for action in actions:
             action = jnp.asarray(action, jnp.float32)
-            grips.append(np.stack([np.asarray(arm.step_grip(g, action)) for arm, g in zip(self.env._arms, grips[-1])]))
+            grips.append(np.stack([np.asarray(arm.step_grip(g, action)) for arm, g in zip(self.env.arms, grips[-1])]))
         return np.stack(grips)
 
     def model(self, model_xml):
         """MJX model of robosuite model xml @model_xml, with the structure of the transfer's own."""
         env = self.env
-        m = env._warp_model(load_model(env._task_name, model_xml), np.asarray(env._reset_qpos[0]))
+        m = _park(load_model(self.task, model_xml), np.asarray(env._reset_qpos[0]))
         mx = mjx.put_model(m, impl="warp", graph_mode=self._graph_mode)
         return jax.tree_util.tree_unflatten(self._tree, jax.tree_util.tree_leaves(mx))
 
@@ -163,7 +181,7 @@ class Transfer:
         states = np.stack([_pad(s, padded + 1) for s, _ in demos]).astype(np.float32)
         actions = np.stack([_pad(a, padded) for _, a in demos]).astype(np.float32)
         grips = np.stack([_pad(self._grips(a), padded + 1) for _, a in demos])
-        q0 = tuple(np.stack([s[0][1:][arm.qpos] for s, _ in demos]).astype(np.float32) for arm in self.env._arms)
+        q0 = tuple(np.stack([s[0][1:][arm.qpos] for s, _ in demos]).astype(np.float32) for arm in self.env.arms)
         lengths = np.array([len(a) for _, a in demos])
         keys = jax.random.split(key, len(demos))
         outputs = self._transfer(stacked, states, actions, grips, q0, lengths, keys, jnp.float32(noise))
@@ -220,6 +238,8 @@ def main(args):
     names = sorted(source["data"], key=lambda k: int(k.removeprefix("demo_")))
     shard, shards = (int(x) for x in args.shard.split("/"))
     names = names[shard::shards]
+    if args.demos:
+        names = [n for n in names if n in args.demos]
     if args.limit:
         names = names[:args.limit]
     models = {name: source[f"data/{name}"].attrs["model_file"] for name in names}
@@ -244,9 +264,9 @@ def main(args):
     assert len(args.samples) == len(args.iterations), "--samples and --iterations give one value per stage"
     stages = [
         Transfer(
-            RobomimicPOMDP(task, model_xml=models[names[0]], max_worlds=batch * samples),
+            task, RobomimicPOMDP(task, model_xml=models[names[0]], max_worlds=batch * samples),
             source[f"data/{names[0]}/states"][0], samples, args.horizon, args.commit, iterations,
-            wp.JaxCallableGraphMode.WARP,
+            wp.JaxCallableGraphMode.WARP, args.refine, args.tolerance,
         )
         for samples, iterations in zip(args.samples, args.iterations)
     ]
@@ -323,8 +343,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=8, help="demos transferred together when they share a model")
     parser.add_argument("--shard", default="0/1", help="i/n: transfer every n-th demo starting at the i-th")
     parser.add_argument("--limit", type=int, default=0, help="transfer at most this many demos")
+    parser.add_argument("--demos", nargs="+", help="transfer only these demos")
     parser.add_argument("--retries", type=int, default=3,
                         help="reruns of unsuccessful demos at the last stage, each at 1.5 times the noise")
+    parser.add_argument("--refine", type=int, default=0,
+                        help="extra sampling rounds, each at 1.5 times the noise, for chunks that still drift")
+    parser.add_argument("--tolerance", type=float, default=1.,
+                        help="mean tracking cost per step (1 = 1 cm of object error) above which a chunk drifts")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--merge", nargs="+", help="shard files to combine into --output instead of transferring")
     parser.add_argument("--reuse", nargs="+", help="earlier outputs whose successful demos are copied, not transferred")

@@ -199,3 +199,18 @@ def test_one_step_transitions_match_dataset(task):
     error = np.abs(np.asarray(next_states.data.qpos)[:, live] - demo["states"][starts + 1][:, 1:][:, live])
     assert np.median(error.max(axis=1)) < 1e-3
     assert np.percentile(error.max(axis=1), 95) < 1e-2
+
+
+def test_packed_demos_unpack_to_the_same_demos(lift_test_dataset, tmp_path):
+    datasets.pack_demos(lift_test_dataset, tmp_path / "demos.npz")
+    datasets.unpack_demos(tmp_path / "demos.npz", tmp_path / "demos.hdf5")
+    with h5py.File(lift_test_dataset, "r") as original, h5py.File(tmp_path / "demos.hdf5", "r") as unpacked:
+        assert set(unpacked["data"]) == set(original["data"])
+        assert set(unpacked["mask"]) == set(original["mask"])
+        assert unpacked["data"].attrs["env_args"] == original["data"].attrs["env_args"]
+        for name in original["data"]:
+            demo, recorded = unpacked[f"data/{name}"], original[f"data/{name}"]
+            assert demo.attrs["model_file"] == recorded.attrs["model_file"]
+            np.testing.assert_allclose(demo["states"][()], recorded["states"][()], rtol=1e-6, atol=1e-6)
+            np.testing.assert_array_equal(demo["actions"][()], recorded["actions"][()].astype(np.float32))
+            np.testing.assert_array_equal(demo["dones"][()], recorded["dones"][()])
