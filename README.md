@@ -32,8 +32,9 @@ obs = jax.jit(jax.vmap(env.observe))(keys, states, None)
   the robosuite models' contact solver settings.
 - [Benchmarks](benchmarks/README.md) compare throughput and fidelity with the original robosuite simulation.
 - **Docs**: [docs/tasks.md](docs/tasks.md) describes the tasks and [docs/data.md](docs/data.md) the data. The
-  pdoc site combines them with the API reference: `JAX_PLATFORMS=cpu uv run --with pdoc python docs/build.py
-  --out site`, published to GitHub Pages by `.github/workflows/docs.yml`.
+  pdoc site combines them with the API reference:
+  `JAX_PLATFORMS=cpu MUJOCO_GL=disable uv run --extra video --with pdoc python docs/build.py --out site`,
+  published to GitHub Pages by `.github/workflows/docs.yml`.
 
 ## Layout
 
