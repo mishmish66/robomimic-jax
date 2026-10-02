@@ -321,7 +321,7 @@ with-cuda = [
 ]
 
 [[package]]
-name = "jax-mdps"
+name = "jax-pomdps"
 version = "0.1.0"
 source = { editable = "../jax_mdps" }
 dependencies = [
@@ -336,16 +336,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "beartype", specifier = ">=0.22.9" },
-    { name = "equinox", specifier = ">=0.13.8" },
-    { name = "eqx-cam", specifier = ">=0.1.2" },
-    { name = "jaxtyping", specifier = ">=0.3.11" },
-    { name = "msgpack", specifier = ">=1.2.3" },
-    { name = "optax", specifier = ">=0.2.8" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "tyro", specifier = ">=1.0.16" },
-]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "jaxlib"
@@ -816,7 +807,7 @@ dependencies = [
     { name = "h5py" },
     { name = "huggingface-hub" },
     { name = "jax", extra = ["cuda13"] },
-    { name = "jax-mdps" },
+    { name = "jax-pomdps" },
     { name = "mujoco" },
     { name = "mujoco-mjx" },
     { name = "mujoco-warp" },
@@ -844,7 +835,7 @@ requires-dist = [
     { name = "imageio", marker = "extra == 'video'" },
     { name = "imageio-ffmpeg", marker = "extra == 'video'" },
     { name = "jax", extras = ["cuda13"], specifier = ">=0.11.2" },
-    { name = "jax-mdps", editable = "../jax_mdps" },
+    { name = "jax-pomdps", editable = "../jax_mdps" },
     { name = "mujoco", specifier = "==3.14.0" },
     { name = "mujoco-mjx", specifier = "==3.14.0" },
     { name = "mujoco-warp", specifier = "==3.14.0" },

@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "robomimic"
 version = "0.5.0"
-description = "Robomimic's manipulation tasks as jax_mdps POMDPs on MuJoCo Warp, and the robomimic demonstration datasets"
+description = "A slop fork of robomimic and robosuite: their manipulation tasks as jax_pomdps POMDPs on MuJoCo Warp, with the robomimic demonstrations transferred into them"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "LicenseRef-VibeCoded-AI-Slop-1.0 AND MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.14"
 dependencies = [
     "numpy>=2.5.3",
@@ -20,7 +20,7 @@ dependencies = [
     "mujoco-warp==3.14.0",
     "warp-lang==1.17.0",
     "jax[cuda13]>=0.11.2",
-    "jax-mdps",
+    "jax-pomdps",
 ]
 
 [project.optional-dependencies]
@@ -30,10 +30,10 @@ video = ["imageio", "imageio-ffmpeg", "Pillow"]
 dev = ["pytest"]
 
 [tool.uv.sources]
-jax-mdps = { path = "../jax_mdps", editable = true }
+jax-pomdps = { path = "../jax_mdps", editable = true }
 
 [tool.setuptools.packages.find]
-include = ["robomimic*"]
+where = ["src"]
 
 [tool.setuptools.package-data]
-robomimic = ["data/*"]
+"robomimic.env" = ["assets/*"]
