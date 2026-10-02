@@ -1,7 +1,7 @@
 """
 Replay dataset demonstrations open-loop in the MuJoCo Warp POMDP and save videos of one camera, rendered by
 the MuJoCo Warp ray tracer. With --show_dataset, each frame shows the dataset's recorded state alongside,
-rendered by MuJoCo's OpenGL renderer.
+rendered by MuJoCo's OpenGL renderer, which needs a GL backend (MUJOCO_GL=egl without a display).
 
 Example:
     python -m robomimic.scripts.replay_demos --dataset ~/data/robomimic_v15/lift/ph/demo_v15.hdf5 --demos 0 1 --output_dir videos

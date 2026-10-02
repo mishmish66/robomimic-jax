@@ -1,14 +1,18 @@
 """Render the documentation site with pdoc.
 
-    JAX_PLATFORMS=cpu MUJOCO_GL=disable uv run --extra video --with pdoc python docs/build.py --out site
+    JAX_PLATFORMS=cpu uv run --extra video --with pdoc python docs/build.py --out site
 
 The site serves the task images that `docs/tasks.md` shows from `docs/images`, rendered by `docs/images.py`.
 `.github/workflows/docs.yml` builds and publishes the site on every push to `master`.
 """
 
 import argparse
+import os
 import shutil
 from pathlib import Path
+
+# the site renders nothing, so mujoco loads no GL backend
+os.environ.setdefault("MUJOCO_GL", "disable")
 
 import pdoc
 import pdoc.docstrings

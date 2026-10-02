@@ -24,7 +24,6 @@ from typing import Any, Literal, NamedTuple
 import numpy as np
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-os.environ.setdefault("MUJOCO_GL", "egl")
 import jax
 import jax.numpy as jnp
 import mujoco

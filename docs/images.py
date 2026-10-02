@@ -1,6 +1,6 @@
 """Render the task images of `docs/tasks.md`: the first and last state of each task's first released demo.
 
-    MUJOCO_GL=egl uv run python docs/images.py
+    MUJOCO_GL=egl uv run --extra video python docs/images.py
 """
 import argparse
 from pathlib import Path
