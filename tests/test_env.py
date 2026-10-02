@@ -3,6 +3,7 @@ Tests of the MuJoCo Warp POMDPs against the robomimic demonstration datasets. Th
 recorded camera images) is downloaded to tests/assets if missing; tests on the task datasets run when
 $ROBOMIMIC_DATA/<task>/<ph|mh>/ holds demo_v15.hdf5 (raw) or low_dim_v15.hdf5 (with observations).
 """
+import json
 from pathlib import Path
 
 import h5py
@@ -14,10 +15,12 @@ import jax.numpy as jnp
 import jax_pomdps as pomdps
 
 from robomimic.data import hdf5, registry
-from robomimic.env import TASK_OF_ENV_NAME, TASKS, RobomimicPOMDP, parked_joints
+from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, RobomimicPOMDP, parked_joints, registry_name
 
 NUM_WORLDS = 4
 CAMERAS = ["agentview", "robot0_eye_in_hand"]
+# robosuite's shaped rewards at the states of the first demos, recorded by robosuite_shaped_rewards.py
+ROBOSUITE_SHAPED_REWARDS = json.loads((Path(__file__).parent / "robosuite_shaped_rewards.json").read_text())
 
 
 @pytest.fixture(scope="session")
@@ -72,7 +75,7 @@ def _live_qpos(m, flat):
 
 @pytest.fixture(scope="module", params=list(TASKS))
 def env(request):
-    return pomdps.make("robomimic.env:robomimic/" + request.param, max_worlds=NUM_WORLDS)
+    return pomdps.make("robomimic.env:" + registry_name(request.param), max_worlds=NUM_WORLDS)
 
 
 def test_tasks_are_registered_pomdps(env):
@@ -83,6 +86,33 @@ def test_tasks_are_registered_pomdps(env):
 def test_unknown_tasks_are_rejected():
     with pytest.raises(ValueError):
         RobomimicPOMDP("lift_real")
+
+
+def test_tasks_register_under_dashed_names():
+    assert registry_name("tool_hang") == "tool-hang"
+    assert isinstance(pomdps.make("robomimic.env:tool-hang", max_worlds=1), RobomimicPOMDP)
+
+
+@pytest.mark.parametrize("task", list(TASKS))
+def test_variants_observe_proprioception_and_robomimics_image_cameras(task):
+    name = registry_name(task)
+    cameras, size = PIXELS[task]
+    images = {f"{camera}_image" for camera in cameras}
+    proprio = set(pomdps.make(f"robomimic.env:{name}", max_worlds=1).observation_space.spaces) - {"object"}
+    assert proprio and all(k.startswith("robot") for k in proprio)
+    expected = {"": proprio | {"object"}, "/prp": proprio, "/pix": images, "/pix-prp": images | proprio}
+    for variant, keys in expected.items():
+        env = pomdps.make(f"robomimic.env:{name}{variant}", max_worlds=1)
+        assert set(env.observation_space.spaces) == keys, variant
+        obs = jax.jit(env.observe)(None, jax.jit(env.reset)(jax.random.key(0)), None)
+        assert set(obs) == keys, variant
+        for k in images & keys:
+            assert obs[k].shape == (size, size, 3) and obs[k].dtype == jnp.uint8, (variant, k)
+
+
+def test_observing_nothing_is_rejected():
+    with pytest.raises(ValueError):
+        RobomimicPOMDP("lift", observe_object=False, observe_proprio=False)
 
 
 def test_batched_reset_step_observe_under_jit_and_vmap(env):
@@ -200,6 +230,15 @@ def test_one_step_transitions_match_dataset(task):
     assert np.percentile(error.max(axis=1), 95) < 1e-2
 
 
+@pytest.mark.parametrize("task", list(TASKS))
+def test_shaped_rewards_match_robosuite(task):
+    path = _task_dataset(task)
+    for name, expected in ROBOSUITE_SHAPED_REWARDS[task].items():
+        demo = _demo(path, name)
+        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]), reward_shaping=True)
+        states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
+        rewards = jax.jit(jax.vmap(lambda s: env.reward(None, None, None, s)))(states)
+        np.testing.assert_allclose(np.asarray(rewards), expected, atol=1e-5, err_msg=name)
 
 
 def test_steps_last_the_datasets_control_period(env):

@@ -1,5 +1,5 @@
 """
-Observations, success, and reward of the robomimic robosuite tasks as JAX functions of simulated world data.
+Observations, success, and rewards of the robomimic robosuite tasks as JAX functions of simulated world data.
 
 Each task produces robosuite's "object" observation vector, sensor for sensor. Robosuite computes the
 pose of an object relative to a gripper from the object pose cached by the previous observation pass;
@@ -48,10 +48,36 @@ def _reach_is_far(gripper_pos, obj_pos):
     return 1. - jnp.tanh(10. * jnp.linalg.norm(gripper_pos - obj_pos)) < 0.6
 
 
+# robosuite's staged reward multipliers of the placement tasks
+_REACH, _GRASP, _LIFT, _HOVER = 0.1, 0.35, 0.5, 0.7
+
+
+def _closeness(dist, rate=10.):
+    """robosuite's `1 - tanh(rate * dist)`."""
+    return 1. - jnp.tanh(rate * dist)
+
+
+class _Grasp:
+    """robosuite's `_check_grasp`: every finger pad of a gripper touches one of a set of objects."""
+    def __init__(self, m, pad_geoms, object_geoms):
+        self.tests = [[ContactTest(m, _ids(m.geom, pad), _ids(m.geom, geoms)) for geoms in object_geoms] for pad in pad_geoms]
+
+    def __call__(self, d, objects=None):
+        """Whether each finger pad touches one of the objects selected by boolean mask `objects` (default: all)."""
+        touching = jnp.array([[test(d) for test in pad] for pad in self.tests])
+        if objects is not None:
+            touching = touching & objects
+        return jnp.all(jnp.any(touching, axis=1))
+
+
 class Task:
     """Base class; tasks without cached sensors return an empty cache."""
     def cache(self, d):
         return ()
+
+    def shaped_reward(self, d):
+        """robosuite's shaped reward; robosuite has none for this task, so the sparse reward."""
+        return self.reward(d)
 
 
 class Lift(Task):
@@ -60,6 +86,7 @@ class Lift(Task):
         self.cube = m.body(spec["cube"]).id
         self.table_height = spec["table_height"]
         self.reward_scale = spec["reward_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["cube_geoms"]])
 
     def object_obs(self, d, cache):
         cube_pos, cube_quat = _body_pose_xyzw(d, self.cube)
@@ -71,6 +98,11 @@ class Lift(Task):
     def reward(self, d):
         return self.success(d).astype(jnp.float32) * 2.25 * self.reward_scale
 
+    def shaped_reward(self, d):
+        """2.25 on success, else reaching the cube (in [0, 1]) plus 0.25 while grasping it, scaled like the sparse reward."""
+        reach = _closeness(jnp.linalg.norm(self.arm.eef_pos(d) - d.xpos[self.cube]))
+        return jnp.where(self.success(d), 2.25, reach + 0.25 * self.grasp(d)) * self.reward_scale
+
 
 class _PlacementTask(Task):
     """Tasks that place objects (PickPlace: into bins, NutAssembly: onto pegs) and observe them relative to the gripper."""
@@ -80,6 +112,7 @@ class _PlacementTask(Task):
         self.observed = spec["observed"]
         self.single = spec["single"]
         self.reward_scale = spec["reward_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], spec["object_geoms"])
 
     def cache(self, d):
         return tuple(_body_pose_xyzw(d, self.bodies[i]) for i in self.observed)
@@ -103,6 +136,37 @@ class _PlacementTask(Task):
     def reward(self, d):
         return jnp.sum(self._placed_all(d)).astype(jnp.float32) * self.reward_scale
 
+    def _reach_targets(self, d):
+        """Positions the gripper reaches for, one per object."""
+        raise NotImplementedError
+
+    def _lift_height(self, d):
+        raise NotImplementedError
+
+    def _hover(self, d, r_lift):
+        """Hovering reward of each object."""
+        raise NotImplementedError
+
+    def _staged(self, d, active):
+        """robosuite's reaching, grasping, lifting, and hovering rewards of the objects selected by mask `active`."""
+        reach = jnp.linalg.norm(self._reach_targets(d) - self.arm.eef_pos(d), axis=1)
+        r_reach = _closeness(jnp.min(jnp.where(active, reach, jnp.inf))) * _REACH
+        grasped = self.grasp(d, active)
+        r_grasp = grasped * _GRASP
+        below = jnp.maximum(self._lift_height(d) - d.xpos[np.asarray(self.bodies), 2], 0.)
+        lifted = _GRASP + _closeness(jnp.min(jnp.where(active, below, jnp.inf)), 15.) * (_LIFT - _GRASP)
+        r_lift = jnp.where(grasped, lifted, 0.)
+        r_hover = jnp.max(jnp.where(active, self._hover(d, r_lift), 0.))
+        return jnp.stack([r_reach, r_grasp, r_lift, r_hover])
+
+    def shaped_reward(self, d):
+        """
+        1 per placed object plus the largest staged reward of the unplaced ones, scaled like the sparse reward.
+        Objects parked outside the workspace count as unplaced, as in robosuite.
+        """
+        placed = self._placed_all(d)
+        return (jnp.sum(placed) + jnp.max(self._staged(d, ~placed))) * self.reward_scale
+
 
 class PickPlace(_PlacementTask):
     def __init__(self, spec, m, arms):
@@ -110,6 +174,20 @@ class PickPlace(_PlacementTask):
         self.bin_low = np.asarray(spec["bin_low"])
         self.bin_high = np.asarray(spec["bin_high"])
         self.bin_z = spec["bin_z"]
+        self.bin_centers = np.asarray(spec["bin_centers"])
+        self.bin_size = np.asarray(spec["bin_size"])
+
+    def _reach_targets(self, d):
+        return d.xpos[np.asarray(self.bodies)]
+
+    def _lift_height(self, d):
+        return self.bin_z + 0.25
+
+    def _hover(self, d, r_lift):
+        """Objects above their bins earn the full lifting reward, others `r_lift`, plus closeness to the bin center."""
+        offset = d.xpos[np.asarray(self.bodies), :2] - self.bin_centers
+        above = jnp.all(jnp.abs(offset) < self.bin_size / 4., axis=1)
+        return jnp.where(above, _LIFT, r_lift) + _closeness(jnp.linalg.norm(offset, axis=1)) * (_HOVER - _LIFT)
 
     def _placed(self, d, i):
         p = d.xpos[self.bodies[i]]
@@ -124,6 +202,18 @@ class NutAssembly(_PlacementTask):
         super().__init__(spec, m, arms)
         self.pegs = _ids(m.body, spec["pegs"])
         self.table_height = spec["table_height"]
+        self.handles = _ids(m.site, spec["handles"])
+        self.table = m.body(spec["table"]).id
+
+    def _reach_targets(self, d):
+        return d.site_xpos[np.asarray(self.handles)]
+
+    def _lift_height(self, d):
+        return d.xpos[self.table, 2] + 0.2
+
+    def _hover(self, d, r_lift):
+        offset = d.xpos[np.asarray(self.bodies), :2] - d.xpos[np.asarray(self.pegs), :2]
+        return r_lift + _closeness(jnp.linalg.norm(offset, axis=1)) * (_HOVER - _LIFT)
 
     def _placed(self, d, i):
         p, peg = d.xpos[self.bodies[i]], d.xpos[self.pegs[i]]

@@ -1,9 +1,9 @@
 """
-Robomimic's robosuite tasks as jax_pomdps POMDPs simulated by MuJoCo Warp through MJX, registered as
-"robomimic/lift", "robomimic/can", "robomimic/square", "robomimic/transport", and "robomimic/tool_hang":
+Robomimic's robosuite tasks as jax_pomdps POMDPs simulated by MuJoCo Warp through MJX, registered as "lift",
+"can", "square", "transport", and "tool-hang", each also as "<name>/prp", "<name>/pix", and "<name>/pix-prp":
 
     import jax_pomdps as pomdps
-    env = pomdps.make("robomimic.env:robomimic/lift")
+    env = pomdps.make("robomimic.env:lift")
 
 Each task's model, controller parameters, task geometry, and initial states come from `assets/`, exported
 from robosuite v1.5. Physics runs in MuJoCo Warp with MuJoCo Playground's simulation settings; the arm and gripper
@@ -184,6 +184,9 @@ class RobomimicPOMDP:
         contacts_per_world: int | None = None,
         constraints_per_world: int | None = None,
         terminate_on_success: bool = True,
+        reward_shaping: bool = False,
+        observe_object: bool = True,
+        observe_proprio: bool = True,
         graph_mode: Literal["jax", "warp", "none"] = "warp",
     ):
         """
@@ -191,9 +194,14 @@ class RobomimicPOMDP:
         task's own model when given. Cameras are observed under "<camera>_image" and, with `camera_depths`,
         "<camera>_depth". At most `max_worlds` worlds are simulated together; with cameras, `observe` is
         unbatched or mapped over exactly `max_worlds` states. `contacts_per_world` is an average over the worlds.
+        With `reward_shaping`, rewards are robosuite's shaped rewards; robosuite has them for Lift, Can, and Square,
+        and Tool Hang and Transport keep the sparse reward. `observe_object` observes the task's "object" vector,
+        and `observe_proprio` each robot's proprioception.
         """
         if task not in TASKS:
             raise ValueError(f"task must be one of {sorted(TASKS)}, not {task!r}")
+        if not (observe_object or observe_proprio or camera_names):
+            raise ValueError("the POMDP must observe the object, proprioception, or cameras")
         spec = _specs()[task]
         m = load_model(task, model_xml)
         self.arms = tuple(Arm(a, m) for a in spec["arms"])
@@ -201,6 +209,8 @@ class RobomimicPOMDP:
         self._task = TASKS[task](spec["task"], m, self.arms)
         self._n_substeps = round(spec["n_substeps"] * m.opt.timestep / _TIMESTEP)
         self._terminate_on_success = terminate_on_success
+        self._reward = self._task.shaped_reward if reward_shaping else self._task.reward
+        self._observe_object, self._observe_proprio = observe_object, observe_proprio
 
         with np.load(_ASSETS / "resets.npz") as resets:
             self._reset_qpos = jnp.asarray(resets[f"{task}_qpos"], jnp.float32)
@@ -268,15 +278,16 @@ class RobomimicPOMDP:
 
     def observe(self, key, next_state, action):
         d = next_state.data
-        obs = {"object": self._task.object_obs(d, next_state.cache)}
-        for arm in self.arms:
-            obs |= arm.observe(d)
+        obs = {"object": self._task.object_obs(d, next_state.cache)} if self._observe_object else {}
+        if self._observe_proprio:
+            for arm in self.arms:
+                obs |= arm.observe(d)
         if self._renderer is not None:
             obs |= self._renderer(d)
         return obs
 
     def reward(self, key, state, action, next_state):
-        return self._task.reward(next_state.data)
+        return self._reward(next_state.data)
 
     def done(self, state):
         return self._terminate_on_success & self.success(state)
@@ -313,5 +324,25 @@ class RobomimicPOMDP:
             return renderer.render()
 
 
-for _task in TASKS:
-    pomdps.register(f"robomimic/{_task}", functools.partial(RobomimicPOMDP, _task))
+# cameras and image size of robomimic's image datasets of each task
+PIXELS = {
+    "lift": (("agentview", "robot0_eye_in_hand"), 84),
+    "can": (("agentview", "robot0_eye_in_hand"), 84),
+    "square": (("agentview", "robot0_eye_in_hand"), 84),
+    "transport": (("shouldercamera0", "shouldercamera1", "robot0_eye_in_hand", "robot1_eye_in_hand"), 84),
+    "tool_hang": (("sideview", "robot0_eye_in_hand"), 240),
+}
+
+
+def registry_name(task: str) -> str:
+    """The name `task` is registered under, its words joined by dashes."""
+    return task.replace("_", "-")
+
+
+for _task, (_cameras, _size) in PIXELS.items():
+    _name = registry_name(_task)
+    _pixels = dict(camera_names=_cameras, camera_height=_size, camera_width=_size)
+    pomdps.register(_name, functools.partial(RobomimicPOMDP, _task))
+    pomdps.register(f"{_name}/prp", functools.partial(RobomimicPOMDP, _task, observe_object=False))
+    pomdps.register(f"{_name}/pix", functools.partial(RobomimicPOMDP, _task, observe_object=False, observe_proprio=False, **_pixels))
+    pomdps.register(f"{_name}/pix-prp", functools.partial(RobomimicPOMDP, _task, observe_object=False, **_pixels))

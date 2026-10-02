@@ -116,7 +116,18 @@
   "task": {
    "cube": "cube_main",
    "table_height": 0.8,
-   "reward_scale": 0.4444444444444444
+   "reward_scale": 0.4444444444444444,
+   "pad_geoms": [
+    [
+     "gripper0_right_finger1_pad_collision"
+    ],
+    [
+     "gripper0_right_finger2_pad_collision"
+    ]
+   ],
+   "cube_geoms": [
+    "cube_g0"
+   ]
   }
  },
  "can": {
@@ -281,7 +292,51 @@
      0.525
     ]
    ],
-   "bin_z": 0.8
+   "bin_z": 0.8,
+   "pad_geoms": [
+    [
+     "gripper0_right_finger1_pad_collision"
+    ],
+    [
+     "gripper0_right_finger2_pad_collision"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "Milk_g0"
+    ],
+    [
+     "Bread_g0"
+    ],
+    [
+     "Cereal_g0"
+    ],
+    [
+     "Can_g0"
+    ]
+   ],
+   "bin_centers": [
+    [
+     0.0025000000000000022,
+     0.15750000000000003
+    ],
+    [
+     0.1975,
+     0.15750000000000003
+    ],
+    [
+     0.0025000000000000022,
+     0.4025
+    ],
+    [
+     0.1975,
+     0.4025
+    ]
+   ],
+   "bin_size": [
+    0.39,
+    0.49
+   ]
   }
  },
  "square": {
@@ -412,7 +467,40 @@
     "peg1",
     "peg2"
    ],
-   "table_height": 0.82
+   "table_height": 0.82,
+   "pad_geoms": [
+    [
+     "gripper0_right_finger1_pad_collision"
+    ],
+    [
+     "gripper0_right_finger2_pad_collision"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "SquareNut_g0",
+     "SquareNut_g1",
+     "SquareNut_g2",
+     "SquareNut_g3",
+     "SquareNut_g4"
+    ],
+    [
+     "RoundNut_g0",
+     "RoundNut_g1",
+     "RoundNut_g2",
+     "RoundNut_g3",
+     "RoundNut_g4",
+     "RoundNut_g5",
+     "RoundNut_g6",
+     "RoundNut_g7",
+     "RoundNut_g8"
+    ]
+   ],
+   "handles": [
+    "SquareNut_handle_site",
+    "RoundNut_handle_site"
+   ],
+   "table": "table"
   }
  },
  "transport": {

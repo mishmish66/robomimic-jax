@@ -22,6 +22,7 @@ text below). <https://github.com/ARISE-Initiative/robosuite>. The port follows r
 | `src/robomimic/env/assets/models.zip` | the task models exported from robosuite's environments, and the meshes and textures of `models/assets/`, copied; robosuite's license is in the archive |
 | `src/robomimic/env/assets/tasks.json`, `resets.npz` | controller and task parameters, and initial states sampled from robosuite's reset distributions, exported from robosuite's environments |
 | `benchmarks/robosuite_baseline.py` | runs robosuite itself, installed when the script runs |
+| `tests/robosuite_shaped_rewards.py` | runs robosuite itself, installed when the script runs |
 
 Controllers, observations, rewards, success checks, scenes, and initial states in these files are robosuite's,
 re-expressed in JAX. robosuite's own license notes that it includes a partial implementation of DeepMind's

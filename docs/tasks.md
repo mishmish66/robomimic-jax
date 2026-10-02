@@ -1,9 +1,22 @@
 # Tasks
 
-The five robomimic simulation tasks, registered as `robomimic/<task>` POMDPs. Every task is robosuite's: its
-scene, robots, controller, observations, reward, and success check, re-expressed in JAX on MuJoCo Warp. The
-quotes are robosuite v1.5's docstrings; the images show the first and last state of each task's first
-released demonstration.
+The five robomimic simulation tasks as POMDPs, made with `jax_pomdps.make("robomimic.env:<name>")`. Every task
+is robosuite's: its scene, robots, controller, observations, reward, and success check, re-expressed in JAX on
+MuJoCo Warp. The quotes are robosuite v1.5's docstrings; the images show the first and last state of each
+task's first released demonstration.
+
+Names follow [jax_gym](https://github.com/mishmish66/jax-gym)'s scheme: dashes join words, and slashes add
+variants. Each task `name` observes the low-dim observations of the robomimic datasets, and also exists as
+
+- `name/prp`, observing each robot's proprioception alone (the `robot<i>_` keys);
+- `name/pix`, observing the cameras of robomimic's image datasets alone, as `<camera>_image` uint8 images:
+  `agentview` and `robot0_eye_in_hand` at 84×84 for Lift, Can, and Square, `shouldercamera0`,
+  `shouldercamera1`, `robot0_eye_in_hand`, and `robot1_eye_in_hand` at 84×84 for Transport, and `sideview` and
+  `robot0_eye_in_hand` at 240×240 for Tool Hang;
+- `name/pix-prp`, observing those images and proprioception, as robomimic's image policies do.
+
+`camera_names`, `camera_height`, and `camera_width` change the cameras, and every other argument of
+`RobomimicPOMDP` (such as `max_worlds` or `reward_shaping`) passes through.
 
 All tasks share these conventions:
 
@@ -16,12 +29,13 @@ All tasks share these conventions:
   `_joint_pos_sin`, `_joint_vel`, `_eef_pos`, `_eef_quat`, `_eef_quat_site`, `_gripper_qpos`, and
   `_gripper_qvel`, and `object`, the task's object observations, in robosuite's order. With `camera_names`,
   `<camera>_image` (and `<camera>_depth`) are added. Quaternions are (x, y, z, w).
-- **Reward** is the sparse reward: 1 when the task succeeds, 0 otherwise (robosuite's normalized sparse
-  reward with `reward_scale` 1).
+- **Reward** is the sparse reward of the datasets: 1 when the task succeeds, 0 otherwise (robosuite's
+  normalized sparse reward with `reward_scale` 1). With `reward_shaping=True` it is robosuite's shaped reward,
+  which robosuite has for Lift, Can, and Square; Tool Hang and Transport keep the sparse reward.
 - **Episodes** end on success (`done`); there is no time limit.
 - **Initial states** are drawn from 1024 states sampled from robosuite's reset distribution.
 
-## `robomimic/lift`
+## `lift`
 
 <img src="images/lift.png" alt="Lift: the first and last state of demo 0" loading="lazy">
 
@@ -33,8 +47,10 @@ All tasks share these conventions:
 
 A Panda arm lifts a cube from a table. **Success**: the cube's center is more than 4 cm above the table top.
 **Object observation** (10): the cube's position and quaternion, and its position relative to the gripper.
+**Shaped reward**: 1 on success, else (`1 - tanh(10 d)` + 0.25 while both finger pads touch the cube) / 2.25,
+with `d` the distance from the gripper to the cube.
 
-## `robomimic/can`
+## `can`
 
 <img src="images/can.png" alt="Can: the first and last state of demo 0" loading="lazy">
 
@@ -47,8 +63,13 @@ A Panda arm lifts a cube from a table. **Success**: the cube's center is more th
 A Panda arm moves a can from one bin into its compartment of the other. **Success**: the can is inside its
 compartment, below the bin's rim, and the gripper has let go of it. **Object observation** (14): the can's
 position and quaternion relative to the gripper, then in the world.
+**Shaped reward**: 1 once the can is placed, else the largest of robosuite's staged rewards: reaching
+(`0.1 (1 - tanh(10 d))`, `d` the distance from the gripper to the can), grasping (0.35 while both finger pads
+touch it), lifting (0.35 to 0.5 while grasped, rising to 25 cm above the bin), and hovering (up to 0.7, nearing
+the center of its compartment). As in robosuite, the parked milk, bread, and cereal boxes take part, so any
+grasp earns the full lifting reward.
 
-## `robomimic/square`
+## `square`
 
 <img src="images/square.png" alt="Square: the first and last state of demo 0" loading="lazy">
 
@@ -61,8 +82,13 @@ position and quaternion relative to the gripper, then in the world.
 A Panda arm picks up a square nut by its handle and slides it down over a square peg. **Success**: the nut is
 within 3 cm of the peg horizontally, low on the peg, and the gripper has let go of it. **Object observation**
 (14): the nut's position and quaternion relative to the gripper, then in the world.
+**Shaped reward**: 1 once the nut is placed, else the largest of robosuite's staged rewards: reaching
+(`0.1 (1 - tanh(10 d))`, `d` the distance from the gripper to the nut's handle), grasping (0.35 while both
+finger pads touch it), lifting (0.35 to 0.5 while grasped, rising to 20 cm above the table), and hovering (up to
+0.7, nearing the peg). As in robosuite, the parked round nut takes part, so any grasp earns the full lifting
+reward.
 
-## `robomimic/transport`
+## `transport`
 
 <img src="images/transport.png" alt="Transport: the first and last state of demo 0" loading="lazy">
 
@@ -80,7 +106,7 @@ touches the target bin's base and the trash touches the trash bin's base. **Obje
 poses of the hammer, the trash, and the lid handle, the bin positions, both contact flags, and the objects'
 positions relative to the grippers.
 
-## `robomimic/tool_hang`
+## `tool-hang`
 
 <img src="images/tool_hang.png" alt="Tool Hang: the first and last state of demo 0" loading="lazy">
 

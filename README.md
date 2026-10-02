@@ -13,7 +13,7 @@ demonstrations transferred into them.
 ```python
 import jax, jax_pomdps as pomdps
 
-env = pomdps.make("robomimic.env:robomimic/lift", max_worlds=1024)
+env = pomdps.make("robomimic.env:lift", max_worlds=1024)
 keys = jax.random.split(jax.random.key(0), 1024)
 states = jax.jit(jax.vmap(env.reset))(keys)
 states = jax.jit(jax.vmap(env.step))(keys, states, jax.vmap(env.action_space.sample)(keys))
