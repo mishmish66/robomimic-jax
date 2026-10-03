@@ -1,6 +1,7 @@
 """
 Robomimic's robosuite tasks as jax_pomdps POMDPs simulated by MuJoCo Warp through MJX, registered as "lift",
-"can", "square", "transport", and "tool-hang", each also as "<name>/prp", "<name>/pix", and "<name>/pix-prp":
+"can", "square", "transport", and "tool-hang", each also as "<name>/prp", "<name>/pix", "<name>/pix-prp", and
+"<name>/mkv":
 
     import jax_pomdps as pomdps
     env = pomdps.make("robomimic.env:lift")
@@ -16,7 +17,6 @@ import os
 import posixpath
 import re
 import zipfile
-from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -154,13 +154,24 @@ def _split_flat(flat, nq, nv):
     return flat[0], flat[1:1 + nq], flat[1 + nq:1 + nq + nv]
 
 
-def _space(key, struct):
-    """Space of observation `key`, of shape and dtype `struct`."""
+def _space(struct):
+    """Space of observations of shape and dtype `struct`: images, vectors, or dicts of them."""
+    if isinstance(struct, dict):
+        return pomdps.spaces.Dict({k: _space(v) for k, v in struct.items()})
     if struct.dtype == jnp.uint8:
         return pomdps.spaces.Image(*struct.shape)
-    if key.endswith("_depth"):
-        return pomdps.spaces.Box(0., np.inf, struct.shape)
     return pomdps.spaces.Box(-np.inf, np.inf, struct.shape)
+
+
+class Pixels(NamedTuple):
+    """
+    Observing the RGB images of `cameras`, of `height` × `width`, stacked along channels in camera order; with
+    `proprio`, a dict of those images under "pixels" and the proprioception vector under "prp".
+    """
+    cameras: tuple[str, ...]
+    height: int
+    width: int
+    proprio: bool = False
 
 
 class State(NamedTuple):
@@ -176,32 +187,44 @@ class RobomimicPOMDP:
         self,
         task: str,
         model_xml: str | None = None,
-        camera_names: Sequence[str] = (),
-        camera_height: int = 84,
-        camera_width: int = 84,
-        camera_depths: bool = False,
+        observation: Literal["low-dim", "prp", "mkv"] | Pixels = "low-dim",
+        reward: Literal["sparse", "shaped", "progress"] = "sparse",
         max_worlds: int = 4096,
         contacts_per_world: int | None = None,
         constraints_per_world: int | None = None,
         terminate_on_success: bool = True,
-        reward_shaping: bool = False,
-        observe_object: bool = True,
-        observe_proprio: bool = True,
         graph_mode: Literal["jax", "warp", "none"] = "warp",
     ):
         """
         Simulates `model_xml`, a robosuite model xml such as a dataset demo's "model_file", instead of the
-        task's own model when given. Cameras are observed under "<camera>_image" and, with `camera_depths`,
-        "<camera>_depth". At most `max_worlds` worlds are simulated together; with cameras, `observe` is
-        unbatched or mapped over exactly `max_worlds` states. `contacts_per_world` is an average over the worlds.
-        With `reward_shaping`, rewards are robosuite's shaped rewards; robosuite has them for Lift, Can, and Square,
-        and Tool Hang and Transport keep the sparse reward. `observe_object` observes the task's "object" vector,
-        and `observe_proprio` each robot's proprioception.
+        task's own model when given.
+
+        `observation` is one of
+        - "low-dim": robomimic's low-dim observations, a dict of the task's "object" vector and each robot's
+          proprioception under robosuite's keys;
+        - "prp": the robots' proprioception, concatenated;
+        - "mkv": a Markov state: the "object" vector of the current state, the proprioception, `qpos` and `qvel` of
+          everything but parked objects, each gripper's open / close state, and the joint positions the arms'
+          controllers pull their nullspace toward;
+        - `Pixels`: camera images, and proprioception with `Pixels.proprio`. `observe` is then unbatched or mapped
+          over exactly `max_worlds` states.
+
+        `reward` is one of
+        - "sparse": 1 on success, else 0;
+        - "shaped": robosuite's shaped reward, which robosuite has for Lift, Can, and Square; Tool Hang and
+          Transport keep the sparse reward;
+        - "progress": 0 on success, else -1 plus half the task's progress in [0, 1], the closeness of approaching,
+          grasping, lifting, and placing the object with the gripper upright for Lift, Can, and Square, and none
+          for Tool Hang and Transport.
+
+        At most `max_worlds` worlds are simulated together. `contacts_per_world` is an average over the worlds.
         """
         if task not in TASKS:
             raise ValueError(f"task must be one of {sorted(TASKS)}, not {task!r}")
-        if not (observe_object or observe_proprio or camera_names):
-            raise ValueError("the POMDP must observe the object, proprioception, or cameras")
+        if not isinstance(observation, Pixels) and observation not in ("low-dim", "prp", "mkv"):
+            raise ValueError(f'observation must be "low-dim", "prp", "mkv", or Pixels, not {observation!r}')
+        if reward not in ("sparse", "shaped", "progress"):
+            raise ValueError(f'reward must be "sparse", "shaped", or "progress", not {reward!r}')
         spec = _specs()[task]
         m = load_model(task, model_xml)
         self.arms = tuple(Arm(a, m) for a in spec["arms"])
@@ -209,8 +232,10 @@ class RobomimicPOMDP:
         self._task = TASKS[task](spec["task"], m, self.arms)
         self._n_substeps = round(spec["n_substeps"] * m.opt.timestep / _TIMESTEP)
         self._terminate_on_success = terminate_on_success
-        self._reward = self._task.shaped_reward if reward_shaping else self._task.reward
-        self._observe_object, self._observe_proprio = observe_object, observe_proprio
+        self._reward = {
+            "sparse": self._task.reward, "shaped": self._task.shaped_reward, "progress": self._task.progress_reward,
+        }[reward]
+        self._observation = observation
 
         with np.load(_ASSETS / "resets.npz") as resets:
             self._reset_qpos = jnp.asarray(resets[f"{task}_qpos"], jnp.float32)
@@ -222,11 +247,14 @@ class RobomimicPOMDP:
         graph_mode = getattr(wp.JaxCallableGraphMode, graph_mode.upper())
         # overflows are reported per world by `overflowed`, not printed
         self._mx = mjx.put_model(simulated, impl="warp", graph_mode=graph_mode).tree_replace({"opt._impl.warn_overflow": 0})
+        parked = parked_joints(self._m, np.asarray(self._reset_qpos[0]))
+        self._live_qpos = np.setdiff1d(np.arange(m.nq), [m.jnt_qposadr[j] + np.arange(7) for j in parked])
+        self._live_qvel = np.setdiff1d(np.arange(m.nv), [m.jnt_dofadr[j] + np.arange(6) for j in parked])
         self._renderer = None
-        if camera_names:
+        if isinstance(observation, Pixels):
             self._renderer = CameraRenderer(
-                self._m, camera_names=camera_names, height=camera_height, width=camera_width, depth=camera_depths,
-                nworld=max_worlds, graph_mode=graph_mode,
+                self._m, camera_names=observation.cameras, height=observation.height, width=observation.width,
+                depth=False, nworld=max_worlds, graph_mode=graph_mode,
             )
         default_contacts, default_constraints = _BUFFER_SIZES[task]
         self.max_worlds = max_worlds
@@ -235,7 +263,7 @@ class RobomimicPOMDP:
 
         self.action_space = pomdps.spaces.Box(-1., 1., (spec["action_dim"],))
         obs_shapes = jax.eval_shape(lambda s: self.observe(None, s, None), jax.eval_shape(self.reset, jax.random.key(0)))
-        self.observation_space = pomdps.spaces.Dict({k: _space(k, v) for k, v in obs_shapes.items()})
+        self.observation_space = _space(obs_shapes)
 
     def simulated_model(self, model_xml: str | None = None) -> mujoco.MjModel:
         """The model MuJoCo Warp simulates for robosuite model xml `model_xml`, or for the task's own model."""
@@ -276,14 +304,26 @@ class RobomimicPOMDP:
         d, _ = jax.lax.scan(substep, d, None, length=self._n_substeps)
         return state._replace(data=d, grip=grip, cache=self._task.cache(state.data))
 
+    def _proprio(self, d):
+        """Each robot's proprioception, concatenated."""
+        return jnp.concatenate([jnp.ravel(v) for arm in self.arms for v in arm.observe(d).values()])
+
     def observe(self, key, next_state, action):
         d = next_state.data
-        obs = {"object": self._task.object_obs(d, next_state.cache)} if self._observe_object else {}
-        if self._observe_proprio:
-            for arm in self.arms:
-                obs |= arm.observe(d)
-        if self._renderer is not None:
-            obs |= self._renderer(d)
+        if isinstance(self._observation, Pixels):
+            images = self._renderer(d)
+            pixels = jnp.concatenate([images[f"{camera}_image"] for camera in self._observation.cameras], axis=-1)
+            return {"pixels": pixels, "prp": self._proprio(d)} if self._observation.proprio else pixels
+        if self._observation == "prp":
+            return self._proprio(d)
+        if self._observation == "mkv":
+            return jnp.concatenate([
+                self._task.object_obs(d, self._task.cache(d)), self._proprio(d), d.qpos[self._live_qpos],
+                d.qvel[self._live_qvel], next_state.grip.ravel(), *next_state.q0,
+            ])
+        obs = {"object": self._task.object_obs(d, next_state.cache)}
+        for arm in self.arms:
+            obs |= arm.observe(d)
         return obs
 
     def reward(self, key, state, action, next_state):
@@ -339,10 +379,20 @@ def registry_name(task: str) -> str:
     return task.replace("_", "-")
 
 
-for _task, (_cameras, _size) in PIXELS.items():
+def _pixels(task, proprio):
+    """Factory of `task` observing the cameras of robomimic's image datasets, and proprioception with `proprio`."""
+    cameras, size = PIXELS[task]
+
+    def make(height: int = size, width: int = size, **kwargs):
+        return RobomimicPOMDP(task, observation=Pixels(cameras, height, width, proprio), **kwargs)
+
+    return make
+
+
+for _task in PIXELS:
     _name = registry_name(_task)
-    _pixels = dict(camera_names=_cameras, camera_height=_size, camera_width=_size)
     pomdps.register(_name, functools.partial(RobomimicPOMDP, _task))
-    pomdps.register(f"{_name}/prp", functools.partial(RobomimicPOMDP, _task, observe_object=False))
-    pomdps.register(f"{_name}/pix", functools.partial(RobomimicPOMDP, _task, observe_object=False, observe_proprio=False, **_pixels))
-    pomdps.register(f"{_name}/pix-prp", functools.partial(RobomimicPOMDP, _task, observe_object=False, **_pixels))
+    pomdps.register(f"{_name}/prp", functools.partial(RobomimicPOMDP, _task, observation="prp"))
+    pomdps.register(f"{_name}/mkv", functools.partial(RobomimicPOMDP, _task, observation="mkv"))
+    pomdps.register(f"{_name}/pix", _pixels(_task, proprio=False))
+    pomdps.register(f"{_name}/pix-prp", _pixels(_task, proprio=True))

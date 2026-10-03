@@ -13,9 +13,11 @@ import pytest
 import jax
 import jax.numpy as jnp
 import jax_pomdps as pomdps
+import warp as wp
 
 from robomimic.data import hdf5, registry
-from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, RobomimicPOMDP, parked_joints, registry_name
+from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, Pixels, RobomimicPOMDP, parked_joints, registry_name
+from robomimic.env.render import CameraRenderer
 
 NUM_WORLDS = 4
 CAMERAS = ["agentview", "robot0_eye_in_hand"]
@@ -94,25 +96,70 @@ def test_tasks_register_under_dashed_names():
 
 
 @pytest.mark.parametrize("task", list(TASKS))
-def test_variants_observe_proprioception_and_robomimics_image_cameras(task):
+def test_variants_observe_low_dim_proprioception_images_or_markov_state(task):
     name = registry_name(task)
     cameras, size = PIXELS[task]
-    images = {f"{camera}_image" for camera in cameras}
-    proprio = set(pomdps.make(f"robomimic.env:{name}", max_worlds=1).observation_space.spaces) - {"object"}
+    low_dim = pomdps.make(f"robomimic.env:{name}", max_worlds=1).observation_space.spaces
+    proprio = [k for k in low_dim if k != "object"]
     assert proprio and all(k.startswith("robot") for k in proprio)
-    expected = {"": proprio | {"object"}, "/prp": proprio, "/pix": images, "/pix-prp": images | proprio}
-    for variant, keys in expected.items():
+    proprio_size = sum(int(np.prod(low_dim[k].shape)) for k in proprio)
+    pixels = pomdps.spaces.Image(size, size, 3 * len(cameras))
+    prp = pomdps.make(f"robomimic.env:{name}/prp", max_worlds=1).observation_space
+    assert prp.shape == (proprio_size,)
+    assert pomdps.make(f"robomimic.env:{name}/pix", max_worlds=1).observation_space == pixels
+    assert pomdps.make(f"robomimic.env:{name}/pix-prp", max_worlds=1).observation_space == pomdps.spaces.Dict(
+        {"pixels": pixels, "prp": prp}
+    )
+    mkv = pomdps.make(f"robomimic.env:{name}/mkv", max_worlds=1).observation_space
+    assert len(mkv.shape) == 1 and mkv.shape[0] > low_dim["object"].shape[0] + proprio_size
+    for variant in ["", "/prp", "/pix", "/pix-prp", "/mkv"]:
         env = pomdps.make(f"robomimic.env:{name}{variant}", max_worlds=1)
-        assert set(env.observation_space.spaces) == keys, variant
         obs = jax.jit(env.observe)(None, jax.jit(env.reset)(jax.random.key(0)), None)
-        assert set(obs) == keys, variant
-        for k in images & keys:
-            assert obs[k].shape == (size, size, 3) and obs[k].dtype == jnp.uint8, (variant, k)
+        assert bool(env.observation_space.contains(obs)), variant
 
 
-def test_observing_nothing_is_rejected():
+def _from_mkv(env, obs, base):
+    """State of `env` rebuilt from its "mkv" observation `obs`, with parked objects as in state `base`."""
+    m = env.model
+    qpos, qvel = np.asarray(base.data.qpos), np.asarray(base.data.qvel)
+    live_qpos = _live_qpos(m, np.concatenate([[0.], qpos]))
+    parked = parked_joints(m, qpos)
+    live_qvel = np.setdiff1d(np.arange(m.nv), [m.jnt_dofadr[j] + np.arange(6) for j in parked])
+    sizes = [len(live_qpos), len(live_qvel), base.grip.size, sum(len(q) for q in base.q0)]
+    qpos_part, qvel_part, grip, q0 = jnp.split(obs[-sum(sizes):], np.cumsum(sizes)[:-1])
+    state = env.init_state(jnp.asarray(qpos).at[live_qpos].set(qpos_part), jnp.asarray(qvel).at[live_qvel].set(qvel_part))
+    return state._replace(grip=grip.reshape(base.grip.shape), q0=tuple(jnp.split(q0, len(base.q0))))
+
+
+@pytest.mark.parametrize("task", list(TASKS))
+def test_mkv_observation_and_action_determine_the_next_observation_reward_and_done(task):
+    env = pomdps.make(f"robomimic.env:{registry_name(task)}/mkv", max_worlds=NUM_WORLDS, reward="shaped")
+    keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
+    step, observe = jax.jit(jax.vmap(env.step)), jax.jit(jax.vmap(env.observe))
+    sample = jax.vmap(env.action_space.sample)
+    states = jax.jit(jax.vmap(env.reset))(keys)
+    for i in range(3):
+        states = step(keys, states, sample(jax.random.split(jax.random.key(i + 1), NUM_WORLDS)))
+    base = jax.jit(env.reset)(jax.random.key(7))
+    rebuilt = jax.jit(jax.vmap(lambda o: _from_mkv(env, o, base)))(observe(keys, states, None))
+    actions = sample(jax.random.split(jax.random.key(9), NUM_WORLDS))
+    next_states, rebuilt_next = step(keys, states, actions), step(keys, rebuilt, actions)
+    np.testing.assert_allclose(
+        np.asarray(observe(keys, rebuilt_next, actions)), np.asarray(observe(keys, next_states, actions)), atol=1e-4
+    )
+    reward = jax.vmap(env.reward)
+    np.testing.assert_allclose(
+        np.asarray(reward(keys, rebuilt, actions, rebuilt_next)), np.asarray(reward(keys, states, actions, next_states)), atol=1e-4
+    )
+    done = jax.vmap(env.done)
+    np.testing.assert_array_equal(np.asarray(done(rebuilt_next)), np.asarray(done(next_states)))
+
+
+def test_unknown_observations_and_rewards_are_rejected():
     with pytest.raises(ValueError):
-        RobomimicPOMDP("lift", observe_object=False, observe_proprio=False)
+        RobomimicPOMDP("lift", observation="depth")
+    with pytest.raises(ValueError):
+        RobomimicPOMDP("lift", reward="dense")
 
 
 def test_batched_reset_step_observe_under_jit_and_vmap(env):
@@ -156,33 +203,34 @@ def test_observations_match_dataset(task):
 def test_camera_images_resemble_dataset_images(lift_test_dataset):
     demo = _demo(lift_test_dataset, "demo_0")
     height, width = demo["obs"]["agentview_image"].shape[1:3]
-    env = RobomimicPOMDP("lift", model_xml=demo["model"], camera_names=CAMERAS, camera_height=height,
-                         camera_width=width, camera_depths=True, max_worlds=NUM_WORLDS)
+    env = RobomimicPOMDP(
+        "lift", model_xml=demo["model"], observation=Pixels(tuple(CAMERAS), height, width), max_worlds=NUM_WORLDS
+    )
     steps = np.linspace(0, len(demo["states"]) - 1, NUM_WORLDS).astype(int)
     states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"][steps])
-    obs = jax.jit(jax.vmap(env.observe))(None, states, None)
-    for camera in CAMERAS:
-        image, expected = np.asarray(obs[camera + "_image"]), demo["obs"][camera + "_image"][steps]
+    pixels = np.asarray(jax.jit(jax.vmap(env.observe))(None, states, None))
+    renderer = CameraRenderer(env.model, CAMERAS, height, width, depth=True, nworld=NUM_WORLDS,
+                              graph_mode=wp.JaxCallableGraphMode.WARP)
+    rendered = jax.jit(jax.vmap(renderer))(states.data)
+    for i, camera in enumerate(CAMERAS):
+        image, expected = pixels[..., 3 * i:3 * i + 3], demo["obs"][camera + "_image"][steps]
         assert image.dtype == np.uint8 and image.shape == expected.shape
         assert np.abs(image.astype(float) - expected).mean() < 8., camera
-        depth, expected = np.asarray(obs[camera + "_depth"]), demo["obs"][camera + "_depth"][steps]
+        depth, expected = np.asarray(rendered[camera + "_depth"]), demo["obs"][camera + "_depth"][steps]
         assert np.median(np.abs(depth - expected)) < 0.01, camera
 
 
-def test_camera_observations_match_their_spaces_unbatched_and_mapped():
-    env = RobomimicPOMDP("lift", camera_names=CAMERAS, camera_height=48, camera_width=64, camera_depths=True,
-                         max_worlds=NUM_WORLDS)
+def test_pixel_observations_match_their_spaces_unbatched_and_mapped():
+    env = RobomimicPOMDP("lift", observation=Pixels(tuple(CAMERAS), 48, 64, proprio=True), max_worlds=NUM_WORLDS)
     space = env.observation_space.spaces
-    assert isinstance(space["agentview_image"], pomdps.spaces.Image)
-    assert space["agentview_image"].shape == (48, 64, 3)
-    assert space["robot0_eye_in_hand_depth"].shape == (48, 64, 1)
+    assert space["pixels"] == pomdps.spaces.Image(48, 64, 3 * len(CAMERAS))
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
     mapped = jax.jit(jax.vmap(env.observe))(keys, jax.jit(jax.vmap(env.reset))(keys), None)
     single = jax.jit(env.observe)(keys[1], jax.jit(env.reset)(keys[1]), None)
-    for k in ["agentview_image", "robot0_eye_in_hand_image", "agentview_depth", "robot0_eye_in_hand_depth"]:
+    for k in ["pixels", "prp"]:
         assert mapped[k].shape == (NUM_WORLDS,) + space[k].shape, k
         np.testing.assert_array_equal(np.asarray(single[k]), np.asarray(mapped[k][1]), err_msg=k)
-    assert int(jnp.ptp(mapped["agentview_image"])) > 0
+    assert int(jnp.ptp(mapped["pixels"])) > 0
 
 
 def test_open_loop_replay_of_lift_demos_succeeds_and_tracks_the_cube(lift_test_dataset):
@@ -235,7 +283,7 @@ def test_shaped_rewards_match_robosuite(task):
     path = _task_dataset(task)
     for name, expected in ROBOSUITE_SHAPED_REWARDS[task].items():
         demo = _demo(path, name)
-        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]), reward_shaping=True)
+        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]), reward="shaped")
         states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
         rewards = jax.jit(jax.vmap(lambda s: env.reward(None, None, None, s)))(states)
         np.testing.assert_allclose(np.asarray(rewards), expected, atol=1e-5, err_msg=name)

@@ -57,6 +57,47 @@ def _closeness(dist, rate=10.):
     return 1. - jnp.tanh(rate * dist)
 
 
+# progress reward: distance scales of reaching and of carrying across, and the weight of progress against the step cost
+_REACH_SCALE, _CARRY_SCALE, _PROGRESS_WEIGHT = 0.5, 0.6, 0.5
+# height the gripper approaches an object from, and horizontal distance within which approaches descend
+_APPROACH_HEIGHT, _ALIGN = 0.15, 0.02
+# horizontal distance from the target over which a carried object descends from clearance to placing height
+_DESCENT_BAND = 0.05
+
+
+def _ramp(dist, scale):
+    """1 at `dist` 0, falling linearly to 0 at `scale`."""
+    return 1. - jnp.clip(dist / scale, 0., 1.)
+
+
+# alignment of the gripper axis with straight down above which the gripper counts as upright (about 20 degrees)
+_UPRIGHT = 0.94
+
+
+def _upright(arm, d):
+    """1 while the gripper points down within `_UPRIGHT`, falling linearly to 0 as it turns horizontal."""
+    return jnp.clip(-arm.eef_rot(d)[2, 2] / _UPRIGHT, 0., 1.)
+
+
+def _approach(offset, height, scale, drop):
+    """
+    Closeness in [0, 1] of approaching a point from above, at horizontal distance `offset` and `height` above it:
+    half from horizontal closeness at `scale`, half from descending through `drop` once within `_ALIGN` of it.
+    """
+    return 0.5 * _ramp(offset, scale) + 0.5 * _ramp(offset, _ALIGN) * _ramp(height, drop)
+
+
+def _reach(arm, d, target):
+    """Closeness of approaching `target` with the gripper from above."""
+    eef = arm.eef_pos(d)
+    return _approach(jnp.linalg.norm(eef[:2] - target[:2]), jnp.abs(eef[2] - target[2]), _REACH_SCALE, _APPROACH_HEIGHT)
+
+
+def _progress(reach, held, *carry):
+    """Progress in [0, 1] from reaching closeness, whether the object is held, and closeness of each carrying stage."""
+    return 0.2 * reach + 0.2 * held + 0.6 * held * sum(carry) / len(carry)
+
+
 class _Grasp:
     """robosuite's `_check_grasp`: every finger pad of a gripper touches one of a set of objects."""
     def __init__(self, m, pad_geoms, object_geoms):
@@ -78,6 +119,14 @@ class Task:
     def shaped_reward(self, d):
         """robosuite's shaped reward; robosuite has none for this task, so the sparse reward."""
         return self.reward(d)
+
+    def progress(self, d):
+        """Progress toward success in [0, 1]; none for this task."""
+        return jnp.zeros(())
+
+    def progress_reward(self, d):
+        """0 on success, else -1 plus weighted progress."""
+        return jnp.where(self.success(d), 0., _PROGRESS_WEIGHT * self.progress(d) - 1.)
 
 
 class Lift(Task):
@@ -102,6 +151,12 @@ class Lift(Task):
         """2.25 on success, else reaching the cube (in [0, 1]) plus 0.25 while grasping it, scaled like the sparse reward."""
         reach = _closeness(jnp.linalg.norm(self.arm.eef_pos(d) - d.xpos[self.cube]))
         return jnp.where(self.success(d), 2.25, reach + 0.25 * self.grasp(d)) * self.reward_scale
+
+    def progress(self, d):
+        """Approaching the cube from above, grasping it, and raising it to the success height, with the gripper upright."""
+        reach = _reach(self.arm, d, d.xpos[self.cube])
+        below = jnp.maximum(self.table_height + 0.04 - d.xpos[self.cube, 2], 0.)
+        return _progress(reach, self.grasp(d), _ramp(below, 0.02)) * _upright(self.arm, d)
 
 
 class _PlacementTask(Task):
@@ -167,6 +222,38 @@ class _PlacementTask(Task):
         placed = self._placed_all(d)
         return (jnp.sum(placed) + jnp.max(self._staged(d, ~placed))) * self.reward_scale
 
+    def _target_offset(self, d, i):
+        """Horizontal distance of object `i` from where it is placed, 0 over it."""
+        raise NotImplementedError
+
+    def _clearance(self, d):
+        """Height a carried object's position clears the obstacles between it and its target at."""
+        raise NotImplementedError
+
+    def _place_height(self, d):
+        """Height of a placed object's position."""
+        raise NotImplementedError
+
+    def progress(self, d):
+        """
+        Progress of the observed object: approaching it from above, grasping it, lifting it to clearance height, and
+        carrying it over its target and down onto it, with the gripper upright. An object over its target counts as held and
+        reached once released.
+        """
+        i = self.observed[0]
+        pos = d.xpos[self.bodies[i]]
+        grasped = self.grasp(d, np.arange(len(self.bodies)) == i)
+        offset = self._target_offset(d, i)
+        over = offset == 0.
+        away = jnp.clip(offset / _DESCENT_BAND, 0., 1.)
+        lift_height = self._clearance(d) - self._place_height(d)
+        goal_z = self._place_height(d) + lift_height * away
+        up = _ramp(jnp.maximum(goal_z - pos[2], 0.), lift_height)
+        across = _approach(offset, jnp.maximum(pos[2] - self._place_height(d), 0.), _CARRY_SCALE, lift_height)
+        released = over & ~grasped
+        reach = jnp.where(released, 1., _reach(self.arm, d, self._reach_targets(d)[i]))
+        return _progress(reach, grasped | released, up, across) * _upright(self.arm, d)
+
 
 class PickPlace(_PlacementTask):
     def __init__(self, spec, m, arms):
@@ -196,6 +283,17 @@ class PickPlace(_PlacementTask):
             & (self.bin_z < p[2]) & (p[2] < self.bin_z + 0.1)
         )
 
+    def _target_offset(self, d, i):
+        """Distance from the object's bin shrunk by 3 cm on each side."""
+        p = d.xpos[self.bodies[i], :2]
+        return jnp.linalg.norm(p - jnp.clip(p, self.bin_low[i] + 0.03, self.bin_high[i] - 0.03))
+
+    def _clearance(self, d):
+        return self.bin_z + 0.2
+
+    def _place_height(self, d):
+        return self.bin_z + 0.06
+
 
 class NutAssembly(_PlacementTask):
     def __init__(self, spec, m, arms):
@@ -218,6 +316,16 @@ class NutAssembly(_PlacementTask):
     def _placed(self, d, i):
         p, peg = d.xpos[self.bodies[i]], d.xpos[self.pegs[i]]
         return jnp.all(jnp.abs(p[:2] - peg[:2]) < 0.03) & (p[2] < self.table_height + 0.05)
+
+    def _target_offset(self, d, i):
+        """Distance from within 1.5 cm of the nut's peg."""
+        return jnp.maximum(jnp.linalg.norm(d.xpos[self.bodies[i], :2] - d.xpos[self.pegs[i], :2]) - 0.015, 0.)
+
+    def _clearance(self, d):
+        return self.table_height + 0.18
+
+    def _place_height(self, d):
+        return self.table_height + 0.01
 
 
 class ToolHang(Task):

@@ -6,17 +6,24 @@ MuJoCo Warp. The quotes are robosuite v1.5's docstrings; the images show the fir
 task's first released demonstration.
 
 Names follow [jax_gym](https://github.com/mishmish66/jax-gym)'s scheme: dashes join words, and slashes add
-variants. Each task `name` observes the low-dim observations of the robomimic datasets, and also exists as
+variants. Each task `name` observes robomimic's low-dim observations, and also exists as
 
-- `name/prp`, observing each robot's proprioception alone (the `robot<i>_` keys);
-- `name/pix`, observing the cameras of robomimic's image datasets alone, as `<camera>_image` uint8 images:
-  `agentview` and `robot0_eye_in_hand` at 84×84 for Lift, Can, and Square, `shouldercamera0`,
-  `shouldercamera1`, `robot0_eye_in_hand`, and `robot1_eye_in_hand` at 84×84 for Transport, and `sideview` and
-  `robot0_eye_in_hand` at 240×240 for Tool Hang;
-- `name/pix-prp`, observing those images and proprioception, as robomimic's image policies do.
+- `name/prp`, observing each robot's proprioception alone, as one vector;
+- `name/pix`, observing images alone: one uint8 image of the cameras of robomimic's image datasets, stacked
+  along channels in this order: `agentview` and `robot0_eye_in_hand` at 84×84 for Lift, Can, and Square,
+  `shouldercamera0`, `shouldercamera1`, `robot0_eye_in_hand`, and `robot1_eye_in_hand` at 84×84 for Transport,
+  and `sideview` and `robot0_eye_in_hand` at 240×240 for Tool Hang; `height` and `width` resize them;
+- `name/pix-prp`, observing `{"pixels": ..., "prp": ...}`, those images and the proprioception vector;
+- `name/mkv`, observing one vector close enough to the Markov state that a policy of the current observation
+  alone can solve the task: the task's object observation of the current state, the proprioception, `qpos`
+  and `qvel` of everything but parked objects, each gripper's open / close state, and the joint positions the
+  arms' controllers pull their nullspace toward (the arms' positions at reset). The next observation, reward,
+  and done follow from it and the action; it leaves out only the solver's warm start, as MuJoCo's physics state
+  does.
 
-`camera_names`, `camera_height`, and `camera_width` change the cameras, and every other argument of
-`RobomimicPOMDP` (such as `max_worlds` or `reward_shaping`) passes through.
+`RobomimicPOMDP(task, observation=..., reward=...)` builds the same POMDPs: `observation` is `"low-dim"`,
+`"prp"`, `"mkv"`, or `Pixels(cameras, height, width, proprio)` for any cameras, and `reward` is `"sparse"`,
+`"shaped"`, or `"progress"`.
 
 All tasks share these conventions:
 
@@ -25,13 +32,16 @@ All tasks share these conventions:
   so 14 values.
 - **Control** runs at 20 Hz, robosuite's rate for the robomimic datasets: each step is 10 substeps of 5 ms,
   and the OSC controller recomputes the arm torques at every substep.
-- **Observations** are a dictionary keyed like robosuite's: per robot, `robot<i>_joint_pos`, `_joint_pos_cos`,
+- **Low-dim observations** are a dictionary keyed like robosuite's: per robot, `robot<i>_joint_pos`, `_joint_pos_cos`,
   `_joint_pos_sin`, `_joint_vel`, `_eef_pos`, `_eef_quat`, `_eef_quat_site`, `_gripper_qpos`, and
-  `_gripper_qvel`, and `object`, the task's object observations, in robosuite's order. With `camera_names`,
-  `<camera>_image` (and `<camera>_depth`) are added. Quaternions are (x, y, z, w).
+  `_gripper_qvel`, and `object`, the task's object observations, in robosuite's order. Quaternions are
+  (x, y, z, w).
 - **Reward** is the sparse reward of the datasets: 1 when the task succeeds, 0 otherwise (robosuite's
-  normalized sparse reward with `reward_scale` 1). With `reward_shaping=True` it is robosuite's shaped reward,
-  which robosuite has for Lift, Can, and Square; Tool Hang and Transport keep the sparse reward.
+  normalized sparse reward with `reward_scale` 1). With `reward="shaped"` it is robosuite's shaped reward,
+  which robosuite has for Lift, Can, and Square; Tool Hang and Transport keep the sparse reward. With
+  `reward="progress"` it is 0 on success and otherwise -1 plus half the task's progress in [0, 1], for
+  approaching, grasping, lifting, and placing the object with the gripper upright in Lift, Can, and Square;
+  Tool Hang and Transport have no progress measure, so -1 until success.
 - **Episodes** end on success (`done`); there is no time limit.
 - **Initial states** are drawn from 1024 states sampled from robosuite's reset distribution.
 

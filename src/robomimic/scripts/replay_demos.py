@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 
 from robomimic.data import hdf5
-from robomimic.env import TASK_OF_ENV_NAME, RobomimicPOMDP
+from robomimic.env import TASK_OF_ENV_NAME, Pixels, RobomimicPOMDP
 
 
 def _label(image, text):
@@ -31,11 +31,10 @@ def replay(f, demo, task, camera, size, output_dir, show_dataset):
     states = f[f"data/{demo}/states"][()]
     actions = f[f"data/{demo}/actions"][()]
     pomdp = RobomimicPOMDP(
-        task, model_xml=f[f"data/{demo}"].attrs["model_file"], camera_names=[camera],
-        camera_height=size, camera_width=size, max_worlds=1,
+        task, model_xml=f[f"data/{demo}"].attrs["model_file"], observation=Pixels((camera,), size, size), max_worlds=1,
     )
     step = jax.jit(lambda s, a: pomdp.step(None, s, a))
-    image = jax.jit(lambda s: pomdp.observe(None, s, None)[f"{camera}_image"])
+    image = jax.jit(lambda s: pomdp.observe(None, s, None))
     success = jax.jit(pomdp.success)
 
     state = pomdp.state_from_flat(states[0])

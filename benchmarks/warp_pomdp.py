@@ -21,7 +21,7 @@ import jax.numpy as jnp
 import mujoco
 
 from robomimic.data import registry
-from robomimic.env import RobomimicPOMDP, load_model, parked_joints
+from robomimic.env import Pixels, RobomimicPOMDP, load_model, parked_joints
 
 DATASETS = {"lift": "lift/ph", "can": "can/ph", "square": "square/mh", "transport": "transport/ph", "tool_hang": "tool_hang/ph"}
 CAMERAS = {"transport": ["shouldercamera0", "robot0_eye_in_hand"], "tool_hang": ["sideview", "robot0_eye_in_hand"]}
@@ -36,8 +36,9 @@ def throughput(task, worlds, steps, cameras):
     """Env steps (step and observe) per second of `worlds` worlds stepped together."""
     # free earlier environments' GPU resources now, not during this one's graph capture
     gc.collect()
-    names = CAMERAS.get(task, ["agentview", "robot0_eye_in_hand"]) if cameras else ()
-    env = RobomimicPOMDP(task, camera_names=names, max_worlds=worlds)
+    names = tuple(CAMERAS.get(task, ["agentview", "robot0_eye_in_hand"]))
+    observation = Pixels(names, 84, 84, proprio=True) if cameras else "low-dim"
+    env = RobomimicPOMDP(task, observation=observation, max_worlds=worlds)
     keys = jax.random.split(jax.random.key(0), worlds)
     state = jax.jit(jax.vmap(env.reset))(keys)
     actions = jax.vmap(env.action_space.sample)(keys) * 0.3
