@@ -12,6 +12,7 @@ controllers, observations, rewards, and success run in JAX, and camera images co
 pytrees, safe under `jax.jit` and `jax.vmap`.
 """
 import functools
+import gc
 import json
 import os
 import posixpath
@@ -79,6 +80,40 @@ def _keep_external_streams_registered():
 
 
 _keep_external_streams_registered()
+
+
+def _collect_garbage_outside_captures():
+    """
+    Pause Python's garbage collector while Warp captures a CUDA graph. Objects collected during a capture can free
+    CUDA textures or modules, which invalidates the capture; they are collected after it instead.
+    """
+    enter, exit_ = wp.ScopedCapture.__enter__, wp.ScopedCapture.__exit__
+    captures = {"depth": 0, "collecting": True}
+
+    def __enter__(self):
+        if captures["depth"] == 0:
+            captures["collecting"] = gc.isenabled()
+            gc.disable()
+        captures["depth"] += 1
+        try:
+            return enter(self)
+        except BaseException:
+            __exit__(self, None, None, None, entered=False)
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback, entered=True):
+        try:
+            if entered:
+                return exit_(self, exc_type, exc_value, traceback)
+        finally:
+            captures["depth"] -= 1
+            if captures["depth"] == 0 and captures["collecting"]:
+                gc.enable()
+
+    wp.ScopedCapture.__enter__, wp.ScopedCapture.__exit__ = __enter__, __exit__
+
+
+_collect_garbage_outside_captures()
 
 
 @functools.cache

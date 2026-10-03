@@ -3,6 +3,7 @@ Tests of the MuJoCo Warp POMDPs against the robomimic demonstration datasets. Th
 recorded camera images) is downloaded to tests/assets if missing; tests on the task datasets run when
 $ROBOMIMIC_DATA/<task>/<ph|mh>/ holds demo_v15.hdf5 (raw) or low_dim_v15.hdf5 (with observations).
 """
+import gc
 import json
 from pathlib import Path
 
@@ -231,6 +232,21 @@ def test_pixel_observations_match_their_spaces_unbatched_and_mapped():
         assert mapped[k].shape == (NUM_WORLDS,) + space[k].shape, k
         np.testing.assert_array_equal(np.asarray(single[k]), np.asarray(mapped[k][1]), err_msg=k)
     assert int(jnp.ptp(mapped["pixels"])) > 0
+
+
+def test_garbage_collection_pauses_while_graphs_are_captured(monkeypatch):
+    begin, collecting = wp.capture_begin, []
+
+    def capture_begin(*args, **kwargs):
+        collecting.append(gc.isenabled())
+        return begin(*args, **kwargs)
+
+    monkeypatch.setattr(wp, "capture_begin", capture_begin)
+    env = RobomimicPOMDP("lift", observation=Pixels(("agentview",), 32, 32), max_worlds=1)
+    state = jax.jit(env.step)(None, jax.jit(env.reset)(jax.random.key(0)), jnp.zeros(7))
+    jax.block_until_ready(jax.jit(env.observe)(None, state, None))
+    assert collecting and not any(collecting)
+    assert gc.isenabled()
 
 
 def test_open_loop_replay_of_lift_demos_succeeds_and_tracks_the_cube(lift_test_dataset):
