@@ -1,7 +1,8 @@
 """
-Robomimic's robosuite tasks as jax_pomdps POMDPs simulated by MuJoCo Warp through MJX, registered as "lift",
-"can", "square", "transport", and "tool-hang", each also as "<name>/prp", "<name>/pix", "<name>/pix-prp", and
-"<name>/mkv":
+Robomimic's robosuite tasks as jax_pomdps POMDPs simulated by MuJoCo Warp through MJX, registered with dense
+rewards as "lift", "can", "square", "transport", and "tool-hang" and with the datasets' sparse rewards as
+"<name>/sparse", each also observing proprioception ("/prp"), a Markov state ("/mkv"), images ("/pix"), or images and
+proprioception ("/pix-prp"):
 
     import jax_pomdps as pomdps
     env = pomdps.make("robomimic.env:lift")
@@ -223,7 +224,7 @@ class RobomimicPOMDP:
         task: str,
         model_xml: str | None = None,
         observation: Literal["low-dim", "prp", "mkv"] | Pixels = "low-dim",
-        reward: Literal["sparse", "shaped", "progress"] = "sparse",
+        reward: Literal["dense", "sparse"] = "dense",
         max_worlds: int = 4096,
         contacts_per_world: int | None = None,
         constraints_per_world: int | None = None,
@@ -245,12 +246,9 @@ class RobomimicPOMDP:
           over exactly `max_worlds` states.
 
         `reward` is one of
-        - "sparse": 1 on success, else 0;
-        - "shaped": robosuite's shaped reward, which robosuite has for Lift, Can, and Square; Tool Hang and
-          Transport keep the sparse reward;
-        - "progress": 0 on success, else -1 plus half the task's progress in [0, 1], the closeness of approaching,
-          grasping, lifting, and placing the object with the gripper upright for Lift, Can, and Square, and none
-          for Tool Hang and Transport.
+        - "dense": 0 on success, else -1 plus half the task's progress in [0, 1], the closeness of each of its stages:
+          reaching, holding, and carrying the objects to their goals;
+        - "sparse": 1 on success, else 0, the reward of the datasets.
 
         At most `max_worlds` worlds are simulated together. `contacts_per_world` is an average over the worlds.
         """
@@ -258,8 +256,8 @@ class RobomimicPOMDP:
             raise ValueError(f"task must be one of {sorted(TASKS)}, not {task!r}")
         if not isinstance(observation, Pixels) and observation not in ("low-dim", "prp", "mkv"):
             raise ValueError(f'observation must be "low-dim", "prp", "mkv", or Pixels, not {observation!r}')
-        if reward not in ("sparse", "shaped", "progress"):
-            raise ValueError(f'reward must be "sparse", "shaped", or "progress", not {reward!r}')
+        if reward not in ("dense", "sparse"):
+            raise ValueError(f'reward must be "dense" or "sparse", not {reward!r}')
         spec = _specs()[task]
         m = load_model(task, model_xml)
         self.arms = tuple(Arm(a, m) for a in spec["arms"])
@@ -267,9 +265,7 @@ class RobomimicPOMDP:
         self._task = TASKS[task](spec["task"], m, self.arms)
         self._n_substeps = round(spec["n_substeps"] * m.opt.timestep / _TIMESTEP)
         self._terminate_on_success = terminate_on_success
-        self._reward = {
-            "sparse": self._task.reward, "shaped": self._task.shaped_reward, "progress": self._task.progress_reward,
-        }[reward]
+        self._reward = self._task.progress_reward if reward == "dense" else self._task.reward
         self._observation = observation
 
         with np.load(_ASSETS / "resets.npz") as resets:
@@ -414,20 +410,23 @@ def registry_name(task: str) -> str:
     return task.replace("_", "-")
 
 
-def _pixels(task, proprio):
-    """Factory of `task` observing the cameras of robomimic's image datasets, and proprioception with `proprio`."""
+def _pixels(task, proprio, reward):
+    """
+    Factory of `task` observing the cameras of robomimic's image datasets, and proprioception with `proprio`, rewarded
+    with `reward`.
+    """
     cameras, size = PIXELS[task]
 
     def make(height: int = size, width: int = size, **kwargs):
-        return RobomimicPOMDP(task, observation=Pixels(cameras, height, width, proprio), **kwargs)
+        return RobomimicPOMDP(task, observation=Pixels(cameras, height, width, proprio), reward=reward, **kwargs)
 
     return make
 
 
 for _task in PIXELS:
-    _name = registry_name(_task)
-    pomdps.register(_name, functools.partial(RobomimicPOMDP, _task))
-    pomdps.register(f"{_name}/prp", functools.partial(RobomimicPOMDP, _task, observation="prp"))
-    pomdps.register(f"{_name}/mkv", functools.partial(RobomimicPOMDP, _task, observation="mkv"))
-    pomdps.register(f"{_name}/pix", _pixels(_task, proprio=False))
-    pomdps.register(f"{_name}/pix-prp", _pixels(_task, proprio=True))
+    for _name, _reward in [(registry_name(_task), "dense"), (f"{registry_name(_task)}/sparse", "sparse")]:
+        pomdps.register(_name, functools.partial(RobomimicPOMDP, _task, reward=_reward))
+        pomdps.register(f"{_name}/prp", functools.partial(RobomimicPOMDP, _task, observation="prp", reward=_reward))
+        pomdps.register(f"{_name}/mkv", functools.partial(RobomimicPOMDP, _task, observation="mkv", reward=_reward))
+        pomdps.register(f"{_name}/pix", _pixels(_task, proprio=False, reward=_reward))
+        pomdps.register(f"{_name}/pix-prp", _pixels(_task, proprio=True, reward=_reward))

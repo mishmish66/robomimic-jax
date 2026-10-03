@@ -1,10 +1,11 @@
 """
-Robomimic's manipulation tasks as jax_pomdps POMDPs simulated by MuJoCo Warp, registered as "lift", "can",
-"square", "transport", and "tool-hang", each also as "<name>/prp", "<name>/pix", "<name>/pix-prp", and
-"<name>/mkv":
+Robomimic's manipulation tasks as jax_pomdps POMDPs simulated by MuJoCo Warp, registered with dense rewards as
+"lift", "can", "square", "transport", and "tool-hang" and with the datasets' sparse rewards as "<name>/sparse", each
+also observing proprioception ("/prp"), a Markov state ("/mkv"), images ("/pix"), or images and proprioception
+("/pix-prp"):
 
     import jax_pomdps as pomdps
-    env = pomdps.make("robomimic.env:tool-hang/pix-prp")
+    env = pomdps.make("robomimic.env:tool-hang/sparse/pix-prp")
 
 .. include:: ../../../docs/tasks.md
 """

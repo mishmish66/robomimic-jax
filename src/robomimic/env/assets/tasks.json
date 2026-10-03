@@ -747,7 +747,30 @@
    "trash_geoms": [
     "trash_g0"
    ],
-   "reward_scale": 1.0
+   "reward_scale": 1.0,
+   "pad_geoms": [
+    [
+     [
+      "gripper0_right_finger1_pad_collision"
+     ],
+     [
+      "gripper0_right_finger2_pad_collision"
+     ]
+    ],
+    [
+     [
+      "gripper1_right_finger1_pad_collision"
+     ],
+     [
+      "gripper1_right_finger2_pad_collision"
+     ]
+    ]
+   ],
+   "lid_geoms": [
+    "transport_start_bin_lid_top",
+    "transport_start_bin_lid_handle"
+   ],
+   "start_bin": "transport_start_bin_base"
   }
  },
  "tool_hang": {
@@ -923,7 +946,27 @@
    "hook_geoms": [
     "frame_horizontal_frame"
    ],
-   "reward_scale": 1.0
+   "reward_scale": 1.0,
+   "pad_geoms": [
+    [
+     "gripper0_right_finger1_pad_collision"
+    ],
+    [
+     "gripper0_right_finger2_pad_collision"
+    ]
+   ],
+   "frame_geoms": [
+    "frame_grip_frame",
+    "frame_vertical_frame",
+    "frame_horizontal_frame",
+    "frame_hook_frame"
+   ],
+   "frame_grip": "frame_grip_frame",
+   "tool_grip": "tool_grip_g0",
+   "tool_grasp_geoms": [
+    "tool_grip_g0",
+    "tool_handle_g0"
+   ]
   }
  }
 }

@@ -93,6 +93,18 @@ def _reach(arm, d, target):
     return _approach(jnp.linalg.norm(eef[:2] - target[:2]), jnp.abs(eef[2] - target[2]), _REACH_SCALE, _APPROACH_HEIGHT)
 
 
+def _lift_and_carry(z, offset, place, clearance):
+    """
+    Closeness of lifting an object at height `z` to `clearance` while it is away from its target, and of carrying it
+    over the target, at horizontal distance `offset`, and down to its placing height `place`.
+    """
+    lift_height = clearance - place
+    goal_z = place + lift_height * jnp.clip(offset / _DESCENT_BAND, 0., 1.)
+    up = _ramp(jnp.maximum(goal_z - z, 0.), lift_height)
+    across = _approach(offset, jnp.maximum(z - place, 0.), _CARRY_SCALE, lift_height)
+    return up, across
+
+
 def _progress(reach, held, *carry):
     """Progress in [0, 1] from reaching closeness, whether the object is held, and closeness of each carrying stage."""
     return 0.2 * reach + 0.2 * held + 0.6 * held * sum(carry) / len(carry)
@@ -121,8 +133,8 @@ class Task:
         return self.reward(d)
 
     def progress(self, d):
-        """Progress toward success in [0, 1]; none for this task."""
-        return jnp.zeros(())
+        """Progress toward success in [0, 1]."""
+        raise NotImplementedError
 
     def progress_reward(self, d):
         """0 on success, else -1 plus weighted progress."""
@@ -244,13 +256,8 @@ class _PlacementTask(Task):
         pos = d.xpos[self.bodies[i]]
         grasped = self.grasp(d, np.arange(len(self.bodies)) == i)
         offset = self._target_offset(d, i)
-        over = offset == 0.
-        away = jnp.clip(offset / _DESCENT_BAND, 0., 1.)
-        lift_height = self._clearance(d) - self._place_height(d)
-        goal_z = self._place_height(d) + lift_height * away
-        up = _ramp(jnp.maximum(goal_z - pos[2], 0.), lift_height)
-        across = _approach(offset, jnp.maximum(pos[2] - self._place_height(d), 0.), _CARRY_SCALE, lift_height)
-        released = over & ~grasped
+        up, across = _lift_and_carry(pos[2], offset, self._place_height(d), self._clearance(d))
+        released = (offset == 0.) & ~grasped
         reach = jnp.where(released, 1., _reach(self.arm, d, self._reach_targets(d)[i]))
         return _progress(reach, grasped | released, up, across) * _upright(self.arm, d)
 
@@ -345,7 +352,10 @@ class ToolHang(Task):
         tool_geoms = _ids(m.geom, spec["tool_geoms"])
         self.robot_tool_contact = ContactTest(m, _ids(m.geom, spec["robot_geoms"]), tool_geoms)
         self.hole_hook_contact = ContactTest(m, _ids(m.geom, spec["hole_ring_geoms"]), _ids(m.geom, spec["hook_geoms"]))
+        self.hole_ring = _ids(m.geom, spec["hole_ring_geoms"])
         self.reward_scale = spec["reward_scale"]
+        self.frame_grip, self.tool_grip = m.geom(spec["frame_grip"]).id, m.geom(spec["tool_grip"]).id
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["frame_geoms"], spec["tool_grasp_geoms"]])
 
     def cache(self, d):
         return (
@@ -390,6 +400,47 @@ class ToolHang(Task):
     def reward(self, d):
         return self.success(d).astype(jnp.float32) * self.reward_scale
 
+    def _frame_progress(self, d):
+        """
+        Reaching the frame's grip, holding the frame, turning its post upright, lifting its tip over the stand's walls,
+        and lowering it into the slot between them; held and reached once released upright over the slot, and 1 once
+        assembled.
+        """
+        post = d.site_xpos[self.frame_site] - d.site_xpos[self.frame_mount_site]
+        upright = jnp.clip(post[2] / jnp.linalg.norm(post), 0., 1.)
+        tip = d.site_xpos[self.frame_tip_site]
+        slot = jnp.mean(d.geom_xpos[np.asarray(self.stand_walls)], axis=0)
+        offset = jnp.linalg.norm(tip[:2] - slot[:2])
+        place = d.geom_xpos[self.base_geom, 2] + 0.005
+        clearance = d.site_xpos[self.stand_mount_site, 2] + 0.02
+        up, across = _lift_and_carry(tip[2], offset, place, clearance)
+        held = self.grasp(d, np.array([True, False]))
+        released = ~held & (offset < 0.01) & (upright > 0.95)
+        reach = jnp.where(released, 1., _ramp(jnp.linalg.norm(self.arm.eef_pos(d) - d.geom_xpos[self.frame_grip]), _REACH_SCALE))
+        return jnp.where(self._frame_assembled(d), 1., _progress(reach, held | released, upright, up, across))
+
+    def _tool_progress(self, d):
+        """
+        Reaching the tool's grip, holding the tool, and bringing its hole onto the hook just past the hook's end; held
+        and reached once released there, and 1 once the tool hangs on the frame.
+        """
+        hang = d.site_xpos[self.frame_hang_site]
+        hook = d.site_xpos[self.frame_site] - hang
+        hook_length = jnp.linalg.norm(hook)
+        hook = hook / hook_length
+        hole = d.site_xpos[self.tool_hole_center]
+        along = jnp.dot(hole - hang, hook)
+        off_hook = jnp.linalg.norm(hole - hang - along * hook)
+        threaded = _approach(off_hook, jnp.maximum(0.06 * hook_length - along, 0.), _CARRY_SCALE, hook_length)
+        held = self.grasp(d, np.array([False, True]))
+        released = ~held & (jnp.linalg.norm(hole - hang) < 0.02)
+        reach = jnp.where(released, 1., _ramp(jnp.linalg.norm(self.arm.eef_pos(d) - d.geom_xpos[self.tool_grip]), _REACH_SCALE))
+        return jnp.where(self._tool_on_frame(d), 1., _progress(reach, held | released, threaded))
+
+    def progress(self, d):
+        """Half for assembling the frame and half for hanging the tool on it once assembled."""
+        return 0.5 * self._frame_progress(d) + 0.5 * jnp.where(self._frame_assembled(d), self._tool_progress(d), 0.)
+
 
 class TwoArmTransport(Task):
     def __init__(self, spec, m, arms):
@@ -400,6 +451,11 @@ class TwoArmTransport(Task):
         self.payload_in_target_bin = ContactTest(m, _ids(m.geom, spec["target_bin_geoms"]), _ids(m.geom, spec["payload_geoms"]))
         self.trash_in_trash_bin = ContactTest(m, _ids(m.geom, spec["trash_bin_geoms"]), _ids(m.geom, spec["trash_geoms"]))
         self.reward_scale = spec["reward_scale"]
+        self.start_bin = m.geom(spec["start_bin"]).id
+        self.lid = m.geom(spec["lid_geoms"][0]).id
+        self.bin_half = float(m.geom_size[self.start_bin][0])
+        objects = [spec["trash_geoms"], spec["lid_geoms"], spec["payload_geoms"]]
+        self.grasps = [_Grasp(m, pads, objects) for pads in spec["pad_geoms"]]
 
     def object_obs(self, d, cache):
         payload_pos, trash_pos, lid_pos = d.xpos[self.payload], d.xpos[self.trash], d.geom_xpos[self.lid_handle]
@@ -418,6 +474,51 @@ class TwoArmTransport(Task):
 
     def reward(self, d):
         return self.success(d).astype(jnp.float32) * self.reward_scale
+
+    def _held(self, d, i):
+        """Whether either gripper holds object `i`: 0 the trash, 1 the lid, 2 the payload."""
+        mask = np.arange(3) == i
+        return jnp.any(jnp.stack([grasp(d, mask) for grasp in self.grasps]))
+
+    def _reach(self, d, target):
+        return jnp.max(jnp.stack([_reach(arm, d, target) for arm in self.arms]))
+
+    def _into_bin(self, d, i, pos, bin_base, placed):
+        """
+        Progress of object `i` at `pos` into the bin of `bin_base`: reaching it from above, holding it, lifting it over
+        the bin's walls, carrying it over the bin, and lowering it in; held and reached once released over the bin, and
+        1 once `placed`.
+        """
+        center = d.geom_xpos[bin_base]
+        inner = self.bin_half - 0.03
+        offset = jnp.linalg.norm(pos[:2] - jnp.clip(pos[:2], center[:2] - inner, center[:2] + inner))
+        up, across = _lift_and_carry(pos[2], offset, center[2] + 0.03, center[2] + 0.2)
+        held = self._held(d, i)
+        released = (offset == 0.) & ~held
+        reach = jnp.where(released, 1., self._reach(d, pos))
+        return jnp.where(placed, 1., _progress(reach, held | released, up, across))
+
+    def _lid_progress(self, d):
+        """
+        Reaching the lid's handle, holding the lid, and sliding it off the start bin, until at most 6 cm of it still
+        covers the bin; held and reached once released more than halfway off, and 1 once off.
+        """
+        moved = jnp.linalg.norm(d.geom_xpos[self.lid, :2] - d.geom_xpos[self.start_bin, :2]) / (2. * self.bin_half - 0.06)
+        held = self._held(d, 1)
+        released = ~held & (moved > 0.5)
+        reach = jnp.where(released, 1., self._reach(d, d.geom_xpos[self.lid_handle]))
+        return jnp.where(moved >= 1., 1., _progress(reach, held | released, jnp.clip(moved, 0., 1.)))
+
+    def progress(self, d):
+        """
+        0.3 for moving the trash into the trash bin, 0.15 for taking the lid off the start bin, and 0.55 for moving the
+        payload into the target bin once the lid is off, with both grippers upright.
+        """
+        trash = self._into_bin(d, 0, d.xpos[self.trash], self.trash_bin, self.trash_in_trash_bin(d))
+        lid = self._lid_progress(d)
+        payload = self._into_bin(d, 2, d.xpos[self.payload], self.target_bin, self.payload_in_target_bin(d))
+        upright = jnp.min(jnp.stack([_upright(arm, d) for arm in self.arms]))
+        return (0.3 * trash + 0.15 * lid + 0.55 * jnp.where(lid == 1., payload, 0.)) * upright
 
 
 TASKS = {

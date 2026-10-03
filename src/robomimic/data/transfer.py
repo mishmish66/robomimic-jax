@@ -261,7 +261,9 @@ def transfer_dataset(dataset, output, *, samples=(32, 256), iterations=(1, 2), h
     assert len(samples) == len(iterations), "`samples` and `iterations` give one value per stage"
     stages = [
         Transfer(
-            task, RobomimicPOMDP(task, model_xml=models[names[0]], max_worlds=max(1, worlds // stage_samples) * stage_samples),
+            task, RobomimicPOMDP(
+                task, model_xml=models[names[0]], reward="sparse", max_worlds=max(1, worlds // stage_samples) * stage_samples,
+            ),
             source[f"data/{names[0]}/states"][0], stage_samples, horizon, commit, stage_iterations,
             wp.JaxCallableGraphMode.WARP, refine, tolerance,
         )

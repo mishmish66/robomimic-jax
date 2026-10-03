@@ -6,7 +6,8 @@ MuJoCo Warp. The quotes are robosuite v1.5's docstrings; the images show the fir
 task's first released demonstration.
 
 Names follow [jax_gym](https://github.com/mishmish66/jax-gym)'s scheme: dashes join words, and slashes add
-variants. Each task `name` observes robomimic's low-dim observations, and also exists as
+variants, the reward first and then the observation. Each task `<task>` has a dense reward and `<task>/sparse`
+the datasets' sparse reward. Each such `name` observes robomimic's low-dim observations, and also exists as
 
 - `name/prp`, observing each robot's proprioception alone, as one vector;
 - `name/pix`, observing images alone: one uint8 image of the cameras of robomimic's image datasets, stacked
@@ -22,8 +23,8 @@ variants. Each task `name` observes robomimic's low-dim observations, and also e
   does.
 
 `RobomimicPOMDP(task, observation=..., reward=...)` builds the same POMDPs: `observation` is `"low-dim"`,
-`"prp"`, `"mkv"`, or `Pixels(cameras, height, width, proprio)` for any cameras, and `reward` is `"sparse"`,
-`"shaped"`, or `"progress"`.
+`"prp"`, `"mkv"`, or `Pixels(cameras, height, width, proprio)` for any cameras, and `reward` is `"dense"` (the
+default) or `"sparse"`.
 
 All tasks share these conventions:
 
@@ -36,12 +37,13 @@ All tasks share these conventions:
   `_joint_pos_sin`, `_joint_vel`, `_eef_pos`, `_eef_quat`, `_eef_quat_site`, `_gripper_qpos`, and
   `_gripper_qvel`, and `object`, the task's object observations, in robosuite's order. Quaternions are
   (x, y, z, w).
-- **Reward** is the sparse reward of the datasets: 1 when the task succeeds, 0 otherwise (robosuite's
-  normalized sparse reward with `reward_scale` 1). With `reward="shaped"` it is robosuite's shaped reward,
-  which robosuite has for Lift, Can, and Square; Tool Hang and Transport keep the sparse reward. With
-  `reward="progress"` it is 0 on success and otherwise -1 plus half the task's progress in [0, 1], for
-  approaching, grasping, lifting, and placing the object with the gripper upright in Lift, Can, and Square;
-  Tool Hang and Transport have no progress measure, so -1 until success.
+- **Dense reward** is 0 on success and otherwise -1 plus half the task's progress in [0, 1]. For each object
+  the task moves, progress is 0.2 for reaching it, 0.2 for holding it, and 0.6 for carrying it to its goal; an
+  object released at its goal counts as held. Lift, Can, Square, and Transport scale progress by how upright the
+  grippers point, as their demonstrations hold them. Every step before success costs at least 0.5, so
+  succeeding sooner always pays.
+- **Sparse reward** (`/sparse`) is the datasets' reward: 1 when the task succeeds, 0 otherwise (robosuite's
+  normalized sparse reward with `reward_scale` 1).
 - **Episodes** end on success (`done`); there is no time limit.
 - **Initial states** are drawn from 1024 states sampled from robosuite's reset distribution.
 
@@ -57,8 +59,7 @@ All tasks share these conventions:
 
 A Panda arm lifts a cube from a table. **Success**: the cube's center is more than 4 cm above the table top.
 **Object observation** (10): the cube's position and quaternion, and its position relative to the gripper.
-**Shaped reward**: 1 on success, else (`1 - tanh(10 d)` + 0.25 while both finger pads touch the cube) / 2.25,
-with `d` the distance from the gripper to the cube.
+**Dense reward**: carrying is raising the cube to the success height.
 
 ## `can`
 
@@ -73,11 +74,8 @@ with `d` the distance from the gripper to the cube.
 A Panda arm moves a can from one bin into its compartment of the other. **Success**: the can is inside its
 compartment, below the bin's rim, and the gripper has let go of it. **Object observation** (14): the can's
 position and quaternion relative to the gripper, then in the world.
-**Shaped reward**: 1 once the can is placed, else the largest of robosuite's staged rewards: reaching
-(`0.1 (1 - tanh(10 d))`, `d` the distance from the gripper to the can), grasping (0.35 while both finger pads
-touch it), lifting (0.35 to 0.5 while grasped, rising to 25 cm above the bin), and hovering (up to 0.7, nearing
-the center of its compartment). As in robosuite, the parked milk, bread, and cereal boxes take part, so any
-grasp earns the full lifting reward.
+**Dense reward**: carrying is lifting the can 20 cm above the bin floor, moving it over its compartment, and lowering
+it in; a can released over its compartment counts as held.
 
 ## `square`
 
@@ -92,11 +90,8 @@ grasp earns the full lifting reward.
 A Panda arm picks up a square nut by its handle and slides it down over a square peg. **Success**: the nut is
 within 3 cm of the peg horizontally, low on the peg, and the gripper has let go of it. **Object observation**
 (14): the nut's position and quaternion relative to the gripper, then in the world.
-**Shaped reward**: 1 once the nut is placed, else the largest of robosuite's staged rewards: reaching
-(`0.1 (1 - tanh(10 d))`, `d` the distance from the gripper to the nut's handle), grasping (0.35 while both
-finger pads touch it), lifting (0.35 to 0.5 while grasped, rising to 20 cm above the table), and hovering (up to
-0.7, nearing the peg). As in robosuite, the parked round nut takes part, so any grasp earns the full lifting
-reward.
+**Dense reward**: carrying is lifting the nut 18 cm above the table, moving it over the peg, and lowering it
+down the peg; a nut released over the peg counts as held.
 
 ## `transport`
 
@@ -115,6 +110,9 @@ other clears a piece of trash out of the target bin and places the hammer in it.
 touches the target bin's base and the trash touches the trash bin's base. **Object observation** (41): the
 poses of the hammer, the trash, and the lid handle, the bin positions, both contact flags, and the objects'
 positions relative to the grippers.
+**Dense reward**: 0.3 for the trash, carried over the trash bin's walls and dropped in; 0.15 for the lid, slid off
+the start bin until at most 6 cm of it covers the bin; and, once the lid is off, 0.55 for the payload, carried over the target bin's walls and lowered in.
+Either arm counts for reaching and holding, so the payload can pass between them.
 
 ## `tool-hang`
 
@@ -131,3 +129,8 @@ ring. The tightest task: the frame and the ring leave millimeters of clearance. 
 upright in the stand's hole, and the tool hangs from the hook without touching the gripper. **Object
 observation** (44): the poses of the stand, the frame's hook, and the tool, each relative to the gripper and in
 the world, and whether the frame is assembled and the tool is on it.
+**Dense reward**: half for the frame: reaching its grip, holding it, turning its post upright, lifting its tip over
+the stand's walls, and lowering it into the slot between them; and, once the frame stands, half for the tool:
+reaching its grip, holding it, and bringing its hole onto the end of the frame's hook. A frame released upright
+over the slot, or a tool released at the hook's end, counts as held. The gripper may point sideways, as the
+demonstrations hold it.

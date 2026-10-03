@@ -97,6 +97,28 @@ def test_tasks_register_under_dashed_names():
 
 
 @pytest.mark.parametrize("task", list(TASKS))
+def test_names_without_a_reward_variant_are_dense_and_sparse_names_are_sparse(task):
+    keys = jax.random.split(jax.random.key(0), 2)
+    for suffix, expected in [("", "dense"), ("/sparse", "sparse")]:
+        env = pomdps.make(f"robomimic.env:{registry_name(task)}{suffix}", max_worlds=1)
+        state = jax.jit(env.reset)(keys[0])
+        reward = float(jax.jit(env.reward)(keys[1], state, None, state))
+        assert (reward < 0.) if expected == "dense" else (reward == 0.), suffix
+
+
+@pytest.mark.parametrize("task", list(TASKS))
+def test_dense_reward_is_zero_on_success_and_between_minus_one_and_minus_a_half_before(task):
+    demo = _demo(_task_dataset(task), "demo_0")
+    env = pomdps.make(f"robomimic.env:{registry_name(task)}", max_worlds=len(demo["states"]))
+    states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
+    rewards = np.asarray(jax.jit(jax.vmap(lambda s: env.reward(None, None, None, s)))(states))
+    success = np.asarray(jax.vmap(env.success)(states))
+    assert success[-1] and np.all(rewards[success] == 0.)
+    assert np.all((-1. <= rewards[~success]) & (rewards[~success] <= -0.5))
+    assert rewards[~success].max() > rewards[~success][0], "progress rises along the demo"
+
+
+@pytest.mark.parametrize("task", list(TASKS))
 def test_variants_observe_low_dim_proprioception_images_or_markov_state(task):
     name = registry_name(task)
     cameras, size = PIXELS[task]
@@ -134,7 +156,7 @@ def _from_mkv(env, obs, base):
 
 @pytest.mark.parametrize("task", list(TASKS))
 def test_mkv_observation_and_action_determine_the_next_observation_reward_and_done(task):
-    env = pomdps.make(f"robomimic.env:{registry_name(task)}/mkv", max_worlds=NUM_WORLDS, reward="shaped")
+    env = pomdps.make(f"robomimic.env:{registry_name(task)}/mkv", max_worlds=NUM_WORLDS)
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
     step, observe = jax.jit(jax.vmap(env.step)), jax.jit(jax.vmap(env.observe))
     sample = jax.vmap(env.action_space.sample)
@@ -160,7 +182,7 @@ def test_unknown_observations_and_rewards_are_rejected():
     with pytest.raises(ValueError):
         RobomimicPOMDP("lift", observation="depth")
     with pytest.raises(ValueError):
-        RobomimicPOMDP("lift", reward="dense")
+        RobomimicPOMDP("lift", reward="shaped")
 
 
 def test_batched_reset_step_observe_under_jit_and_vmap(env):
@@ -299,9 +321,9 @@ def test_shaped_rewards_match_robosuite(task):
     path = _task_dataset(task)
     for name, expected in ROBOSUITE_SHAPED_REWARDS[task].items():
         demo = _demo(path, name)
-        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]), reward="shaped")
+        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
         states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
-        rewards = jax.jit(jax.vmap(lambda s: env.reward(None, None, None, s)))(states)
+        rewards = jax.jit(jax.vmap(lambda s: env._task.shaped_reward(s.data)))(states)
         np.testing.assert_allclose(np.asarray(rewards), expected, atol=1e-5, err_msg=name)
 
 
