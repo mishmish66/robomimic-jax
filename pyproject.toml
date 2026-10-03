@@ -30,7 +30,7 @@ video = ["imageio", "imageio-ffmpeg", "Pillow"]
 dev = ["pytest"]
 
 [tool.uv.sources]
-jax-pomdps = { path = "../jax_mdps", editable = true }
+jax-pomdps = { git = "https://github.com/mishmish66/jax-pomdps.git" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
