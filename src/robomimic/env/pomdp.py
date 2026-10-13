@@ -60,7 +60,7 @@ _BUFFER_SIZES = {
     "lift": (32, 256),
     "can": (32, 256),
     "square": (64, 512),
-    "tool_hang": (128, 512),
+    "tool_hang": (128, 1024),
     "transport": (192, 1024),
 }
 
@@ -115,6 +115,23 @@ def _collect_garbage_outside_captures():
 
 
 _collect_garbage_outside_captures()
+
+# CUDA graphs each Warp JAX callable keeps captured; each holds device memory for the allocations made inside it
+_GRAPH_CACHE_MAX = 8
+
+
+def _bound_graph_caches():
+    """Keep at most `_GRAPH_CACHE_MAX` captured graphs per Warp JAX callable, including those MuJoCo Warp creates."""
+    jax_callable = wp.jax_callable
+
+    @functools.wraps(jax_callable)
+    def bounded(*args, graph_cache_max=_GRAPH_CACHE_MAX, **kwargs):
+        return jax_callable(*args, graph_cache_max=graph_cache_max, **kwargs)
+
+    wp.jax_callable = bounded
+
+
+_bound_graph_caches()
 
 
 @functools.cache
@@ -240,14 +257,15 @@ class RobomimicPOMDP:
           proprioception under robosuite's keys;
         - "prp": the robots' proprioception, concatenated;
         - "mkv": a Markov state: the "object" vector of the current state, the proprioception, `qpos` and `qvel` of
-          everything but parked objects, each gripper's open / close state, and the joint positions the arms'
-          controllers pull their nullspace toward;
+          everything but parked objects, each gripper's open / close state, and how far each arm's joints are from
+          the positions its controller pulls their nullspace toward;
         - `Pixels`: camera images, and proprioception with `Pixels.proprio`. `observe` is then unbatched or mapped
           over exactly `max_worlds` states.
 
         `reward` is one of
-        - "dense": 0 on success, else -1 plus half the task's progress in [0, 1], the closeness of each of its stages:
-          reaching, holding, and carrying the objects to their goals;
+        - "dense": 1 on success plus the change in the task's progress in [0, 1], the closeness of each of its stages:
+          reaching, holding, and carrying the objects to their goals; progress counts 1 once successful, and a step
+          into a diverged simulation takes back all progress;
         - "sparse": 1 on success, else 0, the reward of the datasets.
 
         At most `max_worlds` worlds are simulated together. `contacts_per_world` is an average over the worlds.
@@ -265,7 +283,7 @@ class RobomimicPOMDP:
         self._task = TASKS[task](spec["task"], m, self.arms)
         self._n_substeps = round(spec["n_substeps"] * m.opt.timestep / _TIMESTEP)
         self._terminate_on_success = terminate_on_success
-        self._reward = self._task.progress_reward if reward == "dense" else self._task.reward
+        self._dense = reward == "dense"
         self._observation = observation
 
         with np.load(_ASSETS / "resets.npz") as resets:
@@ -310,6 +328,10 @@ class RobomimicPOMDP:
         )
         d = mjx.forward(self._mx, d)
         grip = jnp.zeros((len(self.arms), 2), jnp.float32)
+        ctrl = d.ctrl
+        for arm, g in zip(self.arms, grip):
+            ctrl = ctrl.at[arm.grip_actuators].set(arm.grip_ctrl(g))
+        d = d.replace(ctrl=ctrl)
         q0 = tuple(d.qpos[arm.qpos] for arm in self.arms)
         return State(d, grip, q0, self._task.cache(d))
 
@@ -320,7 +342,7 @@ class RobomimicPOMDP:
     def step(self, key, state, action):
         m = self._mx
         action = jnp.asarray(action, jnp.float32)
-        d = mjx.forward(m, state.data)
+        d = state.data
         grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(self.arms, state.grip)])
         controls = [(arm.goal(d, action), arm.grip_ctrl(g), q0) for arm, g, q0 in zip(self.arms, grip, state.q0)]
 
@@ -333,6 +355,8 @@ class RobomimicPOMDP:
             return mjx.step(m, d.replace(ctrl=ctrl)), None
 
         d, _ = jax.lax.scan(substep, d, None, length=self._n_substeps)
+        # kinematics, contacts and sensors of the integrated positions and velocities
+        d = mjx.forward(m, d)
         return state._replace(data=d, grip=grip, cache=self._task.cache(state.data))
 
     def _proprio(self, d):
@@ -340,6 +364,11 @@ class RobomimicPOMDP:
         return jnp.concatenate([jnp.ravel(v) for arm in self.arms for v in arm.observe(d).values()])
 
     def observe(self, key, next_state, action):
+        """The observation of `next_state`, with non-finite values of a diverged simulation as 0."""
+        finite = lambda x: jnp.nan_to_num(x, nan=0., posinf=0., neginf=0.) if jnp.issubdtype(x.dtype, jnp.floating) else x
+        return jax.tree.map(finite, self._observe(next_state))
+
+    def _observe(self, next_state):
         d = next_state.data
         if isinstance(self._observation, Pixels):
             images = self._renderer(d)
@@ -350,7 +379,8 @@ class RobomimicPOMDP:
         if self._observation == "mkv":
             return jnp.concatenate([
                 self._task.object_obs(d, self._task.cache(d)), self._proprio(d), d.qpos[self._live_qpos],
-                d.qvel[self._live_qvel], next_state.grip.ravel(), *next_state.q0,
+                d.qvel[self._live_qvel], next_state.grip.ravel(),
+                *(q0 - d.qpos[arm.qpos] for arm, q0 in zip(self.arms, next_state.q0)),
             ])
         obs = {"object": self._task.object_obs(d, next_state.cache)}
         for arm in self.arms:
@@ -358,10 +388,25 @@ class RobomimicPOMDP:
         return obs
 
     def reward(self, key, state, action, next_state):
-        return self._reward(next_state.data)
+        """
+        The task's reward. A step into a diverged simulation ends the episode as a failure: the dense reward takes back
+        the progress of `state`, the sparse reward is 0.
+        """
+        if self._dense:
+            reward = self._task.dense_reward(state.data, next_state.data)
+            failed = -self._task._potential(state.data)
+        else:
+            reward = self._task.reward(next_state.data)
+            failed = 0.
+        return jnp.where(self.diverged(state), 0., jnp.where(self.diverged(next_state), failed, reward))
 
     def done(self, state):
-        return self._terminate_on_success & self.success(state)
+        """Whether the episode ends: on success, and wherever the simulation has diverged."""
+        return (self._terminate_on_success & self.success(state)) | self.diverged(state)
+
+    def diverged(self, state):
+        """Whether the simulation of `state` has diverged to non-finite positions or velocities."""
+        return ~(jnp.isfinite(state.data.qpos).all() & jnp.isfinite(state.data.qvel).all())
 
     def success(self, state):
         """Whether the task has been accomplished in `state`."""

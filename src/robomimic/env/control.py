@@ -78,6 +78,7 @@ class Arm:
         self.body = m.body(spec["body"]).id
         self.qpos, self.qvel = _joint_addresses(m, spec["joints"])
         self.grip_qpos, self.grip_qvel = _joint_addresses(m, spec["grip_joints"])
+        self.grip_travel = float(np.abs(m.jnt_range[[m.joint(j).id for j in spec["grip_joints"]]]).max())
         self.kp = jnp.asarray(spec["kp"], jnp.float32)
         self.kd = jnp.asarray(spec["kd"], jnp.float32)
 
@@ -150,6 +151,16 @@ class Arm:
         pose_torques = mass @ (_NULLSPACE_KP * (q0 - joint_pos) - 2. * jnp.sqrt(_NULLSPACE_KP) * joint_vel)
         torques = J_full.T @ wrench + d.qfrc_bias[dofs] + nullspace.T @ pose_torques
         return jnp.clip(torques, self.arm_ctrl_lo, self.arm_ctrl_hi)
+
+    def grip_opening(self, d):
+        """How far open the gripper's fingers are, from 0 (closed) to 1."""
+        return jnp.clip(jnp.mean(jnp.abs(d.qpos[self.grip_qpos])) / self.grip_travel, 0., 1.)
+
+    def grip_closure(self, d):
+        """How far the gripper is commanded closed, from 0 (open) to 1 (closed), by its actuator controls."""
+        open_ctrl, closed_ctrl = self.grip_ctrl(-_GRIP_SIGN), self.grip_ctrl(_GRIP_SIGN)
+        share = (d.ctrl[self.grip_actuators] - open_ctrl) / (closed_ctrl - open_ctrl)
+        return jnp.clip(jnp.mean(share), 0., 1.)
 
     def step_grip(self, grip, action):
         """Advance the Panda gripper's open / close state by one policy step."""

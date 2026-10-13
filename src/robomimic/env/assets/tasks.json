@@ -336,7 +336,8 @@
    "bin_size": [
     0.39,
     0.49
-   ]
+   ],
+   "carry_scale": 0.85
   }
  },
  "square": {
@@ -500,7 +501,16 @@
     "SquareNut_handle_site",
     "RoundNut_handle_site"
    ],
-   "table": "table"
+   "table": "table",
+   "carry_scale": 0.4,
+   "hole_half_widths": [
+    0.0227,
+    null
+   ],
+   "peg_half_widths": [
+    0.016,
+    null
+   ]
   }
  },
  "transport": {
@@ -770,7 +780,10 @@
     "transport_start_bin_lid_top",
     "transport_start_bin_lid_handle"
    ],
-   "start_bin": "transport_start_bin_base"
+   "start_bin": "transport_start_bin_base",
+   "trash_carry_scale": 0.35,
+   "payload_carry_scale": 0.95,
+   "payload_handle": "payload_handle"
   }
  },
  "tool_hang": {
@@ -966,7 +979,9 @@
    "tool_grasp_geoms": [
     "tool_grip_g0",
     "tool_handle_g0"
-   ]
+   ],
+   "frame_carry_scale": 0.25,
+   "tool_carry_scale": 0.32
   }
  }
 }

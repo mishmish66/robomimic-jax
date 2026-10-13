@@ -137,12 +137,12 @@ class ContactTest:
         self._boxes = {g for g in self._shapes if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX}
         self._margin = np.asarray(m.geom_margin)
 
-    def __call__(self, d):
-        """Whether the two geom groups are in contact in world data `d`."""
+    def __call__(self, d, slack=0.):
+        """Whether the two geom groups are in contact, or within `slack` of it, in world data `d`."""
         touching = []
         for a, b in self._pairs:
             ia, ib = (self._shapes[g].replace(pos=d.geom_xpos[g], mat=d.geom_xmat[g].reshape(3, 3)) for g in (a, b))
             collide = collision_convex._box_box if {a, b} <= self._boxes else collision_convex._convex_convex
             dist, _, _ = collide(ia, ib)
-            touching.append(jnp.min(dist) < max(self._margin[a], self._margin[b]))
+            touching.append(jnp.min(dist) < max(self._margin[a], self._margin[b]) + slack)
         return jnp.any(jnp.stack(touching))

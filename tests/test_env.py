@@ -98,24 +98,32 @@ def test_tasks_register_under_dashed_names():
 
 @pytest.mark.parametrize("task", list(TASKS))
 def test_names_without_a_reward_variant_are_dense_and_sparse_names_are_sparse(task):
-    keys = jax.random.split(jax.random.key(0), 2)
-    for suffix, expected in [("", "dense"), ("/sparse", "sparse")]:
+    key = jax.random.key(0)
+    rewards = {}
+    for suffix in ["", "/sparse"]:
         env = pomdps.make(f"robomimic.env:{registry_name(task)}{suffix}", max_worlds=1)
-        state = jax.jit(env.reset)(keys[0])
-        reward = float(jax.jit(env.reward)(keys[1], state, None, state))
-        assert (reward < 0.) if expected == "dense" else (reward == 0.), suffix
+        down = jnp.zeros(env.action_space.shape).at[np.array([arm.arm_action.start + 2 for arm in env.arms])].set(-1.)
+        state = jax.jit(env.reset)(key)
+        next_state = jax.jit(env.step)(key, state, down)
+        rewards[suffix] = float(jax.jit(env.reward)(key, state, down, next_state))
+    assert rewards["/sparse"] == 0.
+    assert rewards[""] != 0.
 
 
 @pytest.mark.parametrize("task", list(TASKS))
-def test_dense_reward_is_zero_on_success_and_between_minus_one_and_minus_a_half_before(task):
+def test_dense_rewards_along_a_demo_pay_one_for_success_plus_the_progress_it_makes(task):
     demo = _demo(_task_dataset(task), "demo_0")
     env = pomdps.make(f"robomimic.env:{registry_name(task)}", max_worlds=len(demo["states"]))
-    states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
-    rewards = np.asarray(jax.jit(jax.vmap(lambda s: env.reward(None, None, None, s)))(states))
-    success = np.asarray(jax.vmap(env.success)(states))
-    assert success[-1] and np.all(rewards[success] == 0.)
-    assert np.all((-1. <= rewards[~success]) & (rewards[~success] <= -0.5))
-    assert rewards[~success].max() > rewards[~success][0], "progress rises along the demo"
+    from_flat = jax.jit(jax.vmap(env.state_from_flat))
+    success = np.asarray(jax.vmap(env.success)(from_flat(demo["states"])))
+    end = int(np.argmax(success))
+    assert success[end] and not success[:end].any()
+    before, after = from_flat(demo["states"][:end]), from_flat(demo["states"][1:end + 1])
+    rewards = np.asarray(jax.jit(jax.vmap(lambda s, n: env.reward(None, s, None, n)))(before, after))
+    start = float(env._task.progress(jax.jit(env.state_from_flat)(demo["states"][0]).data))
+    np.testing.assert_allclose(rewards.sum(), 1. + (1. - start), atol=1e-4)
+    assert rewards[-1] >= 1.
+    assert np.all(np.abs(rewards[:-1]) <= 1.)
 
 
 @pytest.mark.parametrize("task", list(TASKS))
@@ -149,9 +157,11 @@ def _from_mkv(env, obs, base):
     parked = parked_joints(m, qpos)
     live_qvel = np.setdiff1d(np.arange(m.nv), [m.jnt_dofadr[j] + np.arange(6) for j in parked])
     sizes = [len(live_qpos), len(live_qvel), base.grip.size, sum(len(q) for q in base.q0)]
-    qpos_part, qvel_part, grip, q0 = jnp.split(obs[-sum(sizes):], np.cumsum(sizes)[:-1])
+    qpos_part, qvel_part, grip, q0_offset = jnp.split(obs[-sum(sizes):], np.cumsum(sizes)[:-1])
     state = env.init_state(jnp.asarray(qpos).at[live_qpos].set(qpos_part), jnp.asarray(qvel).at[live_qvel].set(qvel_part))
-    return state._replace(grip=grip.reshape(base.grip.shape), q0=tuple(jnp.split(q0, len(base.q0))))
+    offsets = jnp.split(q0_offset, len(base.q0))
+    q0 = tuple(offset + state.data.qpos[arm.qpos] for arm, offset in zip(env.arms, offsets))
+    return state._replace(grip=grip.reshape(base.grip.shape), q0=q0)
 
 
 @pytest.mark.parametrize("task", list(TASKS))
@@ -176,6 +186,21 @@ def test_mkv_observation_and_action_determine_the_next_observation_reward_and_do
     )
     done = jax.vmap(env.done)
     np.testing.assert_array_equal(np.asarray(done(rebuilt_next)), np.asarray(done(next_states)))
+
+
+@pytest.mark.parametrize("variant", ["", "/sparse", "/mkv", "/prp"])
+def test_diverged_simulations_end_the_episode_taking_back_progress_with_finite_observations(variant):
+    env = pomdps.make(f"robomimic.env:lift{variant}", max_worlds=1)
+    key = jax.random.key(0)
+    state = jax.jit(env.reset)(key)
+    diverged = state._replace(data=state.data.replace(qvel=state.data.qvel.at[0].set(jnp.nan)))
+    assert not bool(env.diverged(state)) and bool(env.diverged(diverged))
+    assert bool(jax.jit(env.done)(diverged))
+    progress = 0. if variant == "/sparse" else float(env._task._potential(state.data))
+    assert float(jax.jit(env.reward)(key, state, None, diverged)) == pytest.approx(-progress)
+    assert float(jax.jit(env.reward)(key, diverged, None, diverged)) == 0.
+    obs = jax.jit(env.observe)(key, diverged, None)
+    assert all(bool(jnp.isfinite(x).all()) for x in jax.tree.leaves(obs))
 
 
 def test_unknown_observations_and_rewards_are_rejected():
@@ -269,6 +294,21 @@ def test_garbage_collection_pauses_while_graphs_are_captured(monkeypatch):
     jax.block_until_ready(jax.jit(env.observe)(None, state, None))
     assert collecting and not any(collecting)
     assert gc.isenabled()
+
+
+def test_warp_callables_keep_at_most_eight_captured_graphs():
+    from warp._src.jax import ffi
+    env = RobomimicPOMDP("lift", max_worlds=4)
+    step = jax.jit(jax.vmap(env.step))
+    keys = jax.random.split(jax.random.key(0), 4)
+    states = jax.jit(jax.vmap(env.reset))(keys)
+    for i in range(12):
+        states = step(keys, states, jnp.full((4, 7), 0.1 * (i % 3) - 0.1))
+    jax.block_until_ready(states)
+    callables = list(ffi._FFI_CALLABLE_REGISTRY.values())
+    assert callables
+    assert all(c.graph_cache_max is not None and c.graph_cache_max <= 8 for c in callables)
+    assert all(len(c.captures) <= 8 for c in callables)
 
 
 def test_open_loop_replay_of_lift_demos_succeeds_and_tracks_the_cube(lift_test_dataset):
