@@ -37,5 +37,5 @@ the released datasets in `$ROBOMIMIC_DATA` (default `~/data/robomimic_v15`; fetc
 
 The robosuite and robomimic parts, and the robomimic datasets, stay under their MIT licenses; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Everything new is under the
-[VibeCoded AI-Slop License v1.0](LICENSE). If you use the demonstrations, cite Mandlekar et al., "What Matters in
-Learning from Offline Human Demonstrations for Robot Manipulation", CoRL 2021.
+[VibeCoded AI-Slop License v1.0](LICENSE). Cite Mandlekar et al., "What Matters in Learning from Offline Human
+Demonstrations for Robot Manipulation", CoRL 2021.

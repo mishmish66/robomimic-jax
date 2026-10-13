@@ -46,7 +46,7 @@ The robomimic v1.5 datasets, released by the robomimic authors under the MIT lic
 (<https://huggingface.co/datasets/robomimic/robomimic_datasets>), collected by human operators on the RoboTurk
 platform. `datasets/warp/*.npz` are derived from their `lift/ph`, `can/ph`, `square/mh`, `transport/ph`, and
 `tool_hang/ph` datasets: the same demos, models, and filter keys, with each demo re-simulated in this
-repository's simulation. Cite their paper if you use them:
+repository's simulation. Cite their paper:
 
 > Ajay Mandlekar, Danfei Xu, Josiah Wong, Soroush Nasiriany, Chen Wang, Rohun Kulkarni, Li Fei-Fei, Silvio
 > Savarese, Yuke Zhu, Roberto Martín-Martín. "What Matters in Learning from Offline Human Demonstrations for

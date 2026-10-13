@@ -26,6 +26,8 @@ jobs:
           repository: mishmish66/jax-pomdps
           path: jax_mdps
       - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
       - name: Build
         working-directory: robomimic
         env:
