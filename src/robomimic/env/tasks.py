@@ -1,5 +1,6 @@
 """
-Observations, success, and rewards of the robomimic robosuite tasks as JAX functions of simulated world data.
+Observations, success, and rewards of the robomimic and MimicGen robosuite tasks as JAX functions of simulated world
+data.
 
 Each task produces robosuite's "object" observation vector, sensor for sensor. Robosuite computes the
 pose of an object relative to a gripper from the object pose cached by the previous observation pass;
@@ -253,6 +254,10 @@ class Task:
     def shaped_reward(self, d):
         """robosuite's shaped reward; robosuite has none for this task, so the sparse reward."""
         return self.reward(d)
+
+    def extra_obs(self, d):
+        """Low-dim observations of the task beyond "object" and the robots' proprioception."""
+        return {}
 
     def progress(self, d):
         """Progress toward success in [0, 1]."""
@@ -831,10 +836,165 @@ class TwoArmTransport(Task):
         return 0.5 * trash + 0.5 * payload_arm
 
 
+def _pose_to_gripper(arm, d, body):
+    """MimicGen's `{obj}_pos`, `_quat`, `_to_robot0_eef_pos` and `_to_robot0_eef_quat` of `body`, from the current pose."""
+    pos, quat = _body_pose_xyzw(d, body)
+    rel_pos, rel_quat = _relative_to_gripper(pos, quat, arm, d)
+    return [pos, quat, rel_pos, rel_quat]
+
+
+def _gripper_in(arm, d, body):
+    """Pose of the grip site in the frame of `body`: MimicGen's `robot0_eef_pos_rel_*` and `_quat_rel_*`."""
+    return relative_pose(d.site_xpos[arm.site], d.site_xmat[arm.site].reshape(3, 3), d.xpos[body], quat2mat(wxyz_to_xyzw(d.xquat[body])))
+
+
+class Stack(Task):
+    """MimicGen's Stack: cube A lifted onto cube B and let go."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.cube_a, self.cube_b = m.body(spec["cube_a"]).id, m.body(spec["cube_b"]).id
+        self.table_height = spec["table_height"]
+        self.half_a, self.half_b = spec["cube_half_sizes"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["cube_a_geoms"]])
+        self.touching = ContactTest(m, _ids(m.geom, spec["cube_a_geoms"]), _ids(m.geom, spec["cube_b_geoms"]))
+
+    def object_obs(self, d, cache):
+        (pa, qa), (pb, qb) = _body_pose_xyzw(d, self.cube_a), _body_pose_xyzw(d, self.cube_b)
+        eef = self.arm.eef_pos(d)
+        return jnp.concatenate([pa, qa, pb, qb, pa - eef, pb - eef, pb - pa])
+
+    def _lifted(self, d):
+        return d.xpos[self.cube_a, 2] > self.table_height + 0.04
+
+    def success(self, d):
+        return ~self.grasp(d) & self._lifted(d) & self.touching(d)
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def shaped_reward(self, d):
+        """robosuite's staged reward: the largest of reaching and grasping cube A, lifting it over B, and stacking it, halved."""
+        pa, pb = d.xpos[self.cube_a], d.xpos[self.cube_b]
+        grasping = self.grasp(d)
+        reach = 0.25 * _closeness(jnp.linalg.norm(self.arm.eef_pos(d) - pa)) + 0.25 * grasping
+        lift = jnp.where(self._lifted(d), 1. + 0.5 * (1. - jnp.tanh(jnp.linalg.norm(pa[:2] - pb[:2]))), 0.)
+        stack = jnp.where(self.success(d), 2., 0.)
+        return jnp.maximum(jnp.maximum(reach, lift), stack) / 2.
+
+    def progress(self, d):
+        """Reaching cube A, holding it, lifting it over cube B and lowering it onto B; held once released resting on B."""
+        pa, pb = d.xpos[self.cube_a], d.xpos[self.cube_b]
+        held = self.grasp.held(d)
+        place = pb[2] + self.half_b + self.half_a
+        offset = jnp.linalg.norm(pa[:2] - pb[:2])
+        released = ~held & self.touching(d) & (offset < self.half_b) & self._lifted(d)
+        reach = jnp.where(released, 1., _reach(self.arm, d, pa))
+        grip = _grip(self.arm, self.grasp, d, held | released, pa)
+        carry = _lift_and_carry(pa[2], offset, place, place + 2. * self.half_a, self.carry_scale)
+        return _progress(reach, grip, held | released, *carry)
+
+
+class Threading(Task):
+    """MimicGen's Threading: the needle's bar threaded through the tripod's ring."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.needle, self.tripod = m.body(spec["needle"]).id, m.body(spec["tripod"]).id
+        self.bar, self.handle = m.geom(spec["bar"]).id, m.geom(spec["handle"]).id
+        self.rings = np.asarray(_ids(m.geom, spec["ring_geoms"]))
+        self.ring_radius = spec["ring_radius"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["needle_geoms"]])
+
+    def object_obs(self, d, cache):
+        return jnp.concatenate([*_pose_to_gripper(self.arm, d, self.needle), *_pose_to_gripper(self.arm, d, self.tripod)])
+
+    def _bar_to_ring(self, d):
+        return jnp.linalg.norm(d.geom_xpos[self.bar] - jnp.mean(d.geom_xpos[self.rings], axis=0))
+
+    def success(self, d):
+        return self._bar_to_ring(d) < self.ring_radius
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def progress(self, d):
+        """Reaching the needle's handle, holding the needle, and bringing its bar's center to the ring's center."""
+        held = self.grasp.held(d)
+        handle = d.geom_xpos[self.handle]
+        reach = _reach(self.arm, d, handle)
+        grip = _grip(self.arm, self.grasp, d, held, handle)
+        dist = self._bar_to_ring(d)
+        return _progress(reach, grip, held, _closing(dist, self.carry_scale), _fine(dist, self.carry_scale, self.ring_radius))
+
+
+class Coffee(Task):
+    """MimicGen's Coffee: the pod put into the coffee machine's holder and the lid closed over it."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.pod, self.machine = m.body(spec["pod"]).id, m.body(spec["machine"]).id
+        self.holder, self.lid = m.body(spec["holder"]).id, m.body(spec["lid"]).id
+        self.hinge = int(m.jnt_qposadr[m.joint(spec["hinge"]).id])
+        self.hinge_open = float(m.jnt_range[m.joint(spec["hinge"]).id, 1])
+        self.pod_half, self.holder_half = spec["pod_half_size"], spec["holder_half_size"]
+        self.lid_half_height = spec["lid_half_height"]
+        self.pod_rest_height = spec["pod_rest_height"]
+        self.lid_closed = spec["lid_closed"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["pod_geoms"]])
+
+    def object_obs(self, d, cache):
+        poses = [part for body in (self.pod, self.machine, self.holder, self.lid) for part in _pose_to_gripper(self.arm, d, body)]
+        return jnp.concatenate([*poses, d.qpos[self.hinge][None]])
+
+    def extra_obs(self, d):
+        """MimicGen's grip-site poses relative to the pod and to the pod holder."""
+        (pod_pos, pod_quat), (holder_pos, holder_quat) = _gripper_in(self.arm, d, self.pod), _gripper_in(self.arm, d, self.holder)
+        prefix = self.arm.prefix
+        return {
+            f"{prefix}eef_pos_rel_pod": pod_pos, f"{prefix}eef_quat_rel_pod": pod_quat,
+            f"{prefix}eef_pos_rel_pod_holder": holder_pos, f"{prefix}eef_quat_rel_pod_holder": holder_quat,
+        }
+
+    def _pod_in_holder(self, d):
+        pod, holder, lid = d.xpos[self.pod], d.xpos[self.holder], d.xpos[self.lid]
+        centered = jnp.linalg.norm(pod[:2] - holder[:2]) <= self.holder_half[0] - self.pod_half[0]
+        above_floor = pod[2] - self.pod_half[2] >= holder[2] - self.holder_half[2]
+        below_lid = pod[2] + self.pod_half[2] <= lid[2] - self.lid_half_height
+        return centered & above_floor & below_lid
+
+    def success(self, d):
+        return (d.qpos[self.hinge] < self.lid_closed) & self._pod_in_holder(d)
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def progress(self, d):
+        """
+        Half for the pod, reaching it, holding it, lifting it over the holder and lowering it in, held once released in
+        the holder; half for closing the lid, once the pod is in the holder.
+        """
+        pod, holder = d.xpos[self.pod], d.xpos[self.holder]
+        held = self.grasp.held(d)
+        inside = self._pod_in_holder(d)
+        released = ~held & inside
+        place = holder[2] + self.pod_rest_height
+        offset = jnp.linalg.norm(pod[:2] - holder[:2])
+        reach = jnp.where(released, 1., _reach(self.arm, d, pod))
+        grip = _grip(self.arm, self.grasp, d, held | released, pod)
+        carry = _lift_and_carry(pod[2], offset, place, holder[2] + self.holder_half[2] + 2. * self.pod_half[2], self.carry_scale)
+        pod_progress = _progress(reach, grip, held | released, *carry)
+        closed = _ramp(jnp.maximum(d.qpos[self.hinge] - self.lid_closed, 0.), self.hinge_open - self.lid_closed)
+        return 0.5 * pod_progress + 0.5 * jnp.where(released, closed, 0.)
+
+
 TASKS = {
     "lift": Lift,
     "can": PickPlace,
     "square": NutAssembly,
     "tool_hang": ToolHang,
     "transport": TwoArmTransport,
+    "stack_d0": Stack,
+    "coffee_d0": Coffee,
+    "threading_d0": Threading,
 }

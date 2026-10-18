@@ -62,6 +62,9 @@ _BUFFER_SIZES = {
     "square": (64, 512),
     "tool_hang": (128, 1024),
     "transport": (192, 1024),
+    "stack_d0": (32, 256),
+    "coffee_d0": (128, 1024),
+    "threading_d0": (64, 512),
 }
 
 
@@ -344,24 +347,24 @@ class RobomimicPOMDP:
         action = jnp.asarray(action, jnp.float32)
         d = state.data
         grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(self.arms, state.grip)])
-        controls = [(arm.goal(d, action), arm.grip_ctrl(g), q0) for arm, g, q0 in zip(self.arms, grip, state.q0)]
+        goals = [arm.goal(d, action) for arm in self.arms]
 
         # each substep's controls use the kinematics computed by the previous substep's step
-        def substep(d, _):
+        def substep(d, k):
             ctrl = d.ctrl
-            for arm, ((goal_pos, goal_ori), grip_ctrl, q0) in zip(self.arms, controls):
+            for arm, (goal_pos, goal_ori), g, q0 in zip(self.arms, goals, state.grip, state.q0):
                 ctrl = ctrl.at[arm.actuators].set(arm.torques(m, d, goal_pos, goal_ori, q0))
-                ctrl = ctrl.at[arm.grip_actuators].set(grip_ctrl)
+                ctrl = ctrl.at[arm.grip_actuators].set(arm.grip_ctrl(arm.substep_grip(g, action, k)))
             return mjx.step(m, d.replace(ctrl=ctrl)), None
 
-        d, _ = jax.lax.scan(substep, d, None, length=self._n_substeps)
+        d, _ = jax.lax.scan(substep, d, jnp.arange(self._n_substeps))
         # kinematics, contacts and sensors of the integrated positions and velocities
         d = mjx.forward(m, d)
         return state._replace(data=d, grip=grip, cache=self._task.cache(state.data))
 
     def _proprio(self, d):
         """Each robot's proprioception, concatenated."""
-        return jnp.concatenate([jnp.ravel(v) for arm in self.arms for v in arm.observe(d).values()])
+        return jnp.concatenate([jnp.ravel(v) for arm in self.arms for v in arm.observe(self._mx, d).values()])
 
     def observe(self, key, next_state, action):
         """The observation of `next_state`, with non-finite values of a diverged simulation as 0."""
@@ -384,8 +387,8 @@ class RobomimicPOMDP:
             ])
         obs = {"object": self._task.object_obs(d, next_state.cache)}
         for arm in self.arms:
-            obs |= arm.observe(d)
-        return obs
+            obs |= arm.observe(self._mx, d)
+        return obs | self._task.extra_obs(d)
 
     def reward(self, key, state, action, next_state):
         """
@@ -447,6 +450,9 @@ PIXELS = {
     "square": (("agentview", "robot0_eye_in_hand"), 84),
     "transport": (("shouldercamera0", "shouldercamera1", "robot0_eye_in_hand", "robot1_eye_in_hand"), 84),
     "tool_hang": (("sideview", "robot0_eye_in_hand"), 240),
+    "stack_d0": (("agentview", "robot0_eye_in_hand"), 84),
+    "coffee_d0": (("agentview", "robot0_eye_in_hand"), 84),
+    "threading_d0": (("agentview", "robot0_eye_in_hand"), 84),
 }
 
 

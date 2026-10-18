@@ -44,6 +44,10 @@ tracer, shaded to approximate robosuite's OpenGL images.
   repository forks.
 - **The robomimic datasets**, MIT: the demonstrations. Cite Mandlekar et al., "What Matters in Learning from
   Offline Human Demonstrations for Robot Manipulation", CoRL 2021.
+- **MimicGen**, © 2024 NVIDIA CORPORATION & AFFILIATES, NVIDIA Source Code License (research or evaluation use
+  only): the Stack, Coffee, and Threading tasks, their models, and their meshes. Its datasets are CC-BY 4.0. Cite
+  Mandlekar et al., "MimicGen: A Data Generation System for Scalable Robot Learning using Human Demonstrations",
+  CoRL 2023.
 - **MuJoCo, MJX, MuJoCo Warp, and MuJoCo Playground**, © DeepMind Technologies Limited, Apache 2.0:
   dependencies, and the simulation settings.
 - **Everything else** is under the VibeCoded AI-Slop License v1.0, © 2026 Misha Lvovsky.

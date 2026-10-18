@@ -63,6 +63,17 @@ def _joint_addresses(m, names):
     return np.array([j.qposadr[0] for j in joints]), np.array([j.dofadr[0] for j in joints])
 
 
+# proprioceptive observations of robosuite v1.5 and of v1.4, in robosuite's order
+_PROPRIO_V15 = (
+    "joint_pos", "joint_pos_cos", "joint_pos_sin", "joint_vel", "eef_pos", "eef_quat", "eef_quat_site", "gripper_qpos",
+    "gripper_qvel",
+)
+_PROPRIO_V14 = (
+    "joint_pos", "joint_pos_cos", "joint_pos_sin", "joint_vel", "eef_pos", "eef_quat", "eef_vel_lin", "eef_vel_ang",
+    "gripper_qpos", "gripper_qvel",
+)
+
+
 class Arm:
     """Controller parameters and model indices for one OSC_POSE arm and its Panda gripper."""
     def __init__(self, spec, m):
@@ -102,6 +113,8 @@ class Arm:
         self.arm_ctrl_lo, self.arm_ctrl_hi = jnp.asarray(m.actuator_ctrlrange[self.actuators].T, jnp.float32)
         self.grip_ctrl_lo, self.grip_ctrl_hi = jnp.asarray(m.actuator_ctrlrange[self.grip_actuators].T, jnp.float32)
         self.grip_speed = spec["grip_speed"]
+        self.grip_substeps = spec.get("grip_substeps", 1)
+        self.proprio_keys = spec.get("proprio", _PROPRIO_V15)
 
     def _mass(self, d):
         """Joint-space mass matrix of the arm's dofs."""
@@ -164,7 +177,15 @@ class Arm:
 
     def step_grip(self, grip, action):
         """Advance the Panda gripper's open / close state by one policy step."""
-        return jnp.clip(grip + _GRIP_SIGN * self.grip_speed * jnp.sign(action[self.grip_action]), -1., 1.)
+        return self.substep_grip(grip, action, self.grip_substeps - 1)
+
+    def substep_grip(self, grip, action, substep):
+        """
+        The Panda gripper's open / close state during substep `substep` of a policy step from state `grip`: it moves
+        `grip_speed` in each of the step's first `grip_substeps` substeps.
+        """
+        moves = jnp.minimum(substep + 1, self.grip_substeps)
+        return jnp.clip(grip + _GRIP_SIGN * self.grip_speed * moves * jnp.sign(action[self.grip_action]), -1., 1.)
 
     def grip_ctrl(self, grip):
         """Gripper actuator controls at open/close state `grip`."""
@@ -173,18 +194,20 @@ class Arm:
         weight = 0.5 * (self.grip_ctrl_hi - self.grip_ctrl_lo)
         return jnp.clip(bias + weight * goal, self.grip_ctrl_lo, self.grip_ctrl_hi)
 
-    def observe(self, d):
-        """Robosuite's proprioceptive observations of the arm and its gripper."""
+    def observe(self, m, d):
+        """Robosuite's proprioceptive observations of the arm and its gripper, under the keys `proprio_keys`."""
         joint_pos = d.qpos[self.qpos]
         obs = {
-            "joint_pos": joint_pos,
-            "joint_pos_cos": jnp.cos(joint_pos),
-            "joint_pos_sin": jnp.sin(joint_pos),
-            "joint_vel": d.qvel[self.qvel],
-            "eef_pos": self.eef_pos(d),
-            "eef_quat": wxyz_to_xyzw(d.xquat[self.body]),
-            "eef_quat_site": mat2quat(d.site_xmat[self.site].reshape(3, 3)),
-            "gripper_qpos": d.qpos[self.grip_qpos],
-            "gripper_qvel": d.qvel[self.grip_qvel],
+            "joint_pos": lambda: joint_pos,
+            "joint_pos_cos": lambda: jnp.cos(joint_pos),
+            "joint_pos_sin": lambda: jnp.sin(joint_pos),
+            "joint_vel": lambda: d.qvel[self.qvel],
+            "eef_pos": lambda: self.eef_pos(d),
+            "eef_quat": lambda: wxyz_to_xyzw(d.xquat[self.body]),
+            "eef_quat_site": lambda: mat2quat(d.site_xmat[self.site].reshape(3, 3)),
+            "eef_vel_lin": lambda: mjx.jac(m, d, d.xpos[self.body], self.body)[0].T @ d.qvel,
+            "eef_vel_ang": lambda: mjx.jac(m, d, d.xpos[self.body], self.body)[1].T @ d.qvel,
+            "gripper_qpos": lambda: d.qpos[self.grip_qpos],
+            "gripper_qvel": lambda: d.qvel[self.grip_qvel],
         }
-        return {f"{self.prefix}{k}": v for k, v in obs.items()}
+        return {f"{self.prefix}{k}": obs[k]() for k in self.proprio_keys}

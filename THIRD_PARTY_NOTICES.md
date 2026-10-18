@@ -44,13 +44,36 @@ robomimic, © 2021 Stanford Vision and Learning Lab, MIT license (full text belo
 
 The robomimic v1.5 datasets, released by the robomimic authors under the MIT license
 (<https://huggingface.co/datasets/robomimic/robomimic_datasets>), collected by human operators on the RoboTurk
-platform. `datasets/warp/*.npz` are derived from their `lift/ph`, `can/ph`, `square/mh`, `transport/ph`, and
-`tool_hang/ph` datasets: the same demos, models, and filter keys, with each demo re-simulated in this
+platform. `datasets/warp/lift_*.npz`, `can_*.npz`, `square_*.npz`, `transport_*.npz`, and `tool_hang_ph.npz`
+are derived from their ph and mh datasets: the same demos, models, and filter keys, with each demo re-simulated in this
 repository's simulation. Cite their paper:
 
 > Ajay Mandlekar, Danfei Xu, Josiah Wong, Soroush Nasiriany, Chen Wang, Rohun Kulkarni, Li Fei-Fei, Silvio
 > Savarese, Yuke Zhu, Roberto Martín-Martín. "What Matters in Learning from Offline Human Demonstrations for
 > Robot Manipulation." Conference on Robot Learning (CoRL), 2021. <https://arxiv.org/abs/2108.03298>
+
+### MimicGen (NVIDIA Source Code License)
+
+MimicGen, © 2024 NVIDIA CORPORATION & AFFILIATES, NVIDIA Source Code License (full text below), which permits use
+for research or evaluation purposes only. <https://github.com/NVlabs/mimicgen>. The port follows MimicGen at commit
+`72bd767`, on robosuite v1.4 at commit `b9d8d3d`, which its installation guide pins.
+
+| file | ported from MimicGen |
+|---|---|
+| `src/robomimic/env/tasks.py` | the observations and success checks of `mimicgen/envs/robosuite/stack.py` (`Stack_D0`), `coffee.py` (`Coffee_D0`), and `threading.py` (`Threading_D0`) |
+| `src/robomimic/env/control.py` | robosuite v1.4's Panda gripper timing and proprioceptive observations, as MimicGen's datasets record them |
+| `src/robomimic/env/assets/models.zip` | the models `models/stack_d0.xml`, `coffee_d0.xml`, and `threading_d0.xml`, exported from MimicGen's environments, and the meshes of `mimicgen/models/robosuite/assets/` (`assets/objects/meshes/coffee_*.stl`), copied; MimicGen's license is in the archive as `LICENSE_MIMICGEN` |
+| `src/robomimic/env/assets/tasks.json`, `resets.npz` | the controller and task parameters of those three tasks, and initial states sampled from their reset distributions, exported from MimicGen's environments |
+| `tests/mimicgen_shaped_rewards.py` | runs MimicGen and robosuite v1.4 themselves, installed when the script runs |
+
+MimicGen's datasets are released under CC-BY 4.0 (<https://huggingface.co/datasets/amandlek/mimicgen_datasets>).
+`datasets/warp/stack_d0.npz`, `coffee_d0.npz`, and `threading_d0.npz` are derived from their `core` datasets of
+those tasks: the same demos and models, each re-simulated in this repository's simulation.
+Cite their paper:
+
+> Ajay Mandlekar, Soroush Nasiriany, Bowen Wen, Iretiayo Akinola, Yashraj Narang, Linxi Fan, Yuke Zhu, Dieter Fox.
+> "MimicGen: A Data Generation System for Scalable Robot Learning using Human Demonstrations." Conference on Robot
+> Learning (CoRL), 2023. <https://arxiv.org/abs/2310.17596>
 
 ### MuJoCo, MJX, and MuJoCo Warp (Apache 2.0)
 
@@ -125,6 +148,46 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### MimicGen
+
+```
+NVIDIA License
+
+1. Definitions
+
+“Licensor” means any person or entity that distributes its Work.
+“Work” means (a) the original work of authorship made available under this license, which may include software, documentation, or other files, and (b) any additions to or derivative works  thereof  that are made available under this license.
+The terms “reproduce,” “reproduction,” “derivative works,” and “distribution” have the meaning as provided under U.S. copyright law; provided, however, that for the purposes of this license, derivative works shall not include works that remain separable from, or merely link (or bind by name) to the interfaces of, the Work.
+Works are “made available” under this license by including in or with the Work either (a) a copyright notice referencing the applicability of this license to the Work, or (b) a copy of this license.
+
+2. License Grant
+
+2.1 Copyright Grant. Subject to the terms and conditions of this license, each Licensor grants to you a perpetual, worldwide, non-exclusive, royalty-free, copyright license to use, reproduce, prepare derivative works of, publicly display, publicly perform, sublicense and distribute its Work and any resulting derivative works in any form.
+
+3. Limitations
+
+3.1 Redistribution. You may reproduce or distribute the Work only if (a) you do so under this license, (b) you include a complete copy of this license with your distribution, and (c) you retain without modification any copyright, patent, trademark, or attribution notices that are present in the Work.
+
+3.2 Derivative Works. You may specify that additional or different terms apply to the use, reproduction, and distribution of your derivative works of the Work (“Your Terms”) only if (a) Your Terms provide that the use limitation in Section 3.3 applies to your derivative works, and (b) you identify the specific derivative works that are subject to Your Terms. Notwithstanding Your Terms, this license (including the redistribution requirements in Section 3.1) will continue to apply to the Work itself.
+
+3.3 Use Limitation. The Work and any derivative works thereof only may be used or intended for use non-commercially. Notwithstanding the foregoing, NVIDIA Corporation and its affiliates may use the Work and any derivative works commercially. As used herein, “non-commercially” means for research or evaluation purposes only.
+
+3.4 Patent Claims. If you bring or threaten to bring a patent claim against any Licensor (including any claim, cross-claim or counterclaim in a lawsuit) to enforce any patents that you allege are infringed by any Work, then your rights under this license from such Licensor (including the grant in Section 2.1) will terminate immediately.
+
+3.5 Trademarks. This license does not grant any rights to use any Licensor’s or its affiliates’ names, logos, or trademarks, except as necessary to reproduce the notices described in this license.
+
+3.6 Termination. If you violate any term of this license, then your rights under this license (including the grant in Section 2.1) will terminate immediately.
+
+4. Disclaimer of Warranty.
+
+THE WORK IS PROVIDED “AS IS” WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WARRANTIES OR CONDITIONS OF 
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE OR NON-INFRINGEMENT. YOU BEAR THE RISK OF UNDERTAKING ANY ACTIVITIES UNDER THIS LICENSE. 
+
+5. Limitation of Liability.
+
+EXCEPT AS PROHIBITED BY APPLICABLE LAW, IN NO EVENT AND UNDER NO LEGAL THEORY, WHETHER IN TORT (INCLUDING NEGLIGENCE), CONTRACT, OR OTHERWISE SHALL ANY LICENSOR BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR RELATED TO THIS LICENSE, THE USE OR INABILITY TO USE THE WORK (INCLUDING BUT NOT LIMITED TO LOSS OF GOODWILL, BUSINESS INTERRUPTION, LOST PROFITS OR DATA, COMPUTER FAILURE OR MALFUNCTION, OR ANY OTHER DAMAGES OR LOSSES), EVEN IF THE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 ```
 
 ### Apache License 2.0

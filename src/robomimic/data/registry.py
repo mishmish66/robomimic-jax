@@ -1,5 +1,6 @@
 """
-The released robomimic demonstration datasets: where they live in the Hugging Face repo, and downloading them.
+The released robomimic and MimicGen demonstration datasets: where they live in the Hugging Face repos, and downloading
+them.
 """
 import os
 import shutil
@@ -24,6 +25,13 @@ DATASETS = {
     (t, dt, h): f"v1.5/{t}/{dt}/{'demo' if h == 'raw' else h}_v15.hdf5"
     for dt, (tasks, types) in _RELEASES.items() for t in tasks for h in types
 }
+
+MIMICGEN_HF_REPO_ID = "amandlek/mimicgen_datasets"
+# default directory of the downloaded MimicGen datasets
+MIMICGEN_DATA_DIR = Path(os.environ.get("MIMICGEN_DATA", "~/data/mimicgen")).expanduser()
+# path in the MimicGen Hugging Face repo, and under MIMICGEN_DATA_DIR, of each ported task's generated dataset, which
+# holds both states and low-dim observations
+MIMICGEN_DATASETS = {task: f"core/{task}.hdf5" for task in ("stack_d0", "coffee_d0", "threading_d0")}
 
 
 def download_file_from_hf(repo_id, filename, download_dir, check_overwrite=True):

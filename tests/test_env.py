@@ -1,7 +1,8 @@
 """
 Tests of the MuJoCo Warp POMDPs against the robomimic demonstration datasets. The Lift test dataset (with
 recorded camera images) is downloaded to tests/assets if missing; tests on the task datasets run when
-$ROBOMIMIC_DATA/<task>/<ph|mh>/ holds demo_v15.hdf5 (raw) or low_dim_v15.hdf5 (with observations).
+$ROBOMIMIC_DATA/<task>/<ph|mh>/ holds demo_v15.hdf5 (raw) or low_dim_v15.hdf5 (with observations), and, for the
+MimicGen tasks, when $MIMICGEN_DATA holds their generated dataset.
 """
 import gc
 import json
@@ -39,6 +40,11 @@ def lift_test_dataset():
 
 
 def _task_dataset(task, filename="demo_v15.hdf5"):
+    if task in registry.MIMICGEN_DATASETS:
+        path = registry.MIMICGEN_DATA_DIR / registry.MIMICGEN_DATASETS[task]
+        if path.exists():
+            return path
+        pytest.skip(f"no {path}")
     for dataset_type in ["ph", "mh"]:
         path = registry.DATA_DIR / task / dataset_type / filename
         if path.exists():
@@ -130,8 +136,10 @@ def test_dense_rewards_along_a_demo_pay_one_for_success_plus_the_progress_it_mak
 def test_variants_observe_low_dim_proprioception_images_or_markov_state(task):
     name = registry_name(task)
     cameras, size = PIXELS[task]
-    low_dim = pomdps.make(f"robomimic.env:{name}", max_worlds=1).observation_space.spaces
-    proprio = [k for k in low_dim if k != "object"]
+    env = pomdps.make(f"robomimic.env:{name}", max_worlds=1)
+    low_dim = env.observation_space.spaces
+    extra = set(jax.eval_shape(lambda s: env._task.extra_obs(s.data), jax.eval_shape(env.reset, jax.random.key(0))))
+    proprio = [k for k in low_dim if k != "object" and k not in extra]
     assert proprio and all(k.startswith("robot") for k in proprio)
     proprio_size = sum(int(np.prod(low_dim[k].shape)) for k in proprio)
     pixels = pomdps.spaces.Image(size, size, 3 * len(cameras))
@@ -243,7 +251,7 @@ def test_observations_match_dataset(task):
     previous = init(demo["states"][steps - 1])
     states = init(demo["states"][steps])._replace(cache=previous.cache)
     obs = jax.jit(jax.vmap(env.observe))(None, states, None)
-    assert set(obs) == set(demo["obs"])
+    assert set(obs) == {k for k in demo["obs"] if not k.endswith("_image")}
     for k in obs:
         np.testing.assert_allclose(np.asarray(obs[k]), demo["obs"][k][steps], atol=1e-5, err_msg=k)
 

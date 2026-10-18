@@ -84,10 +84,10 @@ class Transfer:
 
         def rollout(flat, grip, q0, actions):
             def step(state, action):
-                state = env.step(None, state, action)
-                d = state.data
+                next_state = env.step(None, state, action)
+                d = next_state.data
                 flat = jnp.concatenate([d.time[None], d.qpos, d.qvel])
-                return state, (flat, env.success(state), env.reward(None, None, None, state))
+                return next_state, (flat, env.success(next_state), env.reward(None, state, action, next_state))
             start = env.state_from_flat(flat)._replace(grip=grip, q0=q0)
             return jax.lax.scan(step, start, actions)[1]
 

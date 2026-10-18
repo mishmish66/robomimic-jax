@@ -162,6 +162,46 @@ demonstrations close them along, to all, with them pointing as the demonstration
 over the slot, or a tool released at the hook's end, counts as held. The gripper may point sideways, as the
 demonstrations hold it.
 
+## MimicGen tasks
+
+Three tasks of [MimicGen](https://github.com/NVlabs/mimicgen), at their D0 initial-state distributions, are made the
+same way: `stack-d0`, `coffee-d0`, and `threading-d0`. MimicGen recorded them on robosuite v1.4 (the commit its
+installation guide pins), and they follow that version where it differs from v1.5:
+
+- **Gripper**: the open / close state moves 0.01 in each of a step's 25 substeps, rather than 0.2 once per step.
+- **Proprioception**: `robot<i>_eef_vel_lin` and `_eef_vel_ang`, the linear and angular velocity of the hand body,
+  in place of `_eef_quat_site`.
+- **Object poses relative to the gripper** are those of the current state, as MimicGen's datasets record them, with
+  the gripper's position from its grip site and its orientation from its hand body.
+- **Dense reward**: none of them has robosuite's progress conventions upstream, so each defines its own stages below.
+
+### `stack-d0`
+
+A Panda arm stacks a red cube on a green one, both placed at random on the table. **Success**: the red cube is not
+grasped, its center is more than 4 cm above the table, and it touches the green cube. **Object observation** (23):
+each cube's position and quaternion, each cube's position relative to the gripper, and the green cube's position
+relative to the red one. **Dense reward**: reaching and holding the red cube, lifting it over the green cube, and
+lowering it onto it; a red cube released resting on the green one counts as held. **Shaped reward**: robosuite's
+staged reward, halved.
+
+### `coffee-d0`
+
+A Panda arm puts a coffee pod into a coffee machine's pod holder and closes the machine's lid. The machine stands at a
+fixed pose with its lid open; the pod starts at random within a 6 cm square. **Success**: the lid is within 15 degrees
+of closed, and the pod is within 5.2 mm of the holder's axis, above the holder's floor, and below the lid.
+**Object observation** (57): for the pod, the machine, the pod holder, and the lid, the position, quaternion, and
+pose relative to the gripper, then the lid's hinge angle; the low-dim observation also holds the grip site's pose
+relative to the pod and to the pod holder (`robot0_eef_pos_rel_pod`, `_quat_rel_pod`, `_pos_rel_pod_holder`,
+`_quat_rel_pod_holder`). **Dense reward**: half for the pod, reaching it, holding it, lifting it over the holder,
+and lowering it in, a pod released in the holder counting as held; half for closing the lid once the pod is in.
+
+### `threading-d0`
+
+A Panda arm threads a needle through the ring of a tripod. The needle lies at random on the table; the tripod stands
+at a fixed pose. **Success**: the center of the needle's bar is within 12 mm of the ring's center. **Object
+observation** (28): for the needle and the tripod, the position, quaternion, and pose relative to the gripper.
+**Dense reward**: reaching the needle's handle, holding the needle, and bringing its bar's center to the ring's.
+
 ## Training with PPO
 
 Measured in October 2026 with [rlx](https://github.com/mishmish66/rlx)'s PPO on the `/mkv` observation and the
