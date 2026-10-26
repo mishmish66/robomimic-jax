@@ -13,7 +13,7 @@ from robomimic.env.geometry import axisangle2mat, mat2quat, quat2mat, wxyz_to_xy
 
 # stiffness of the nullspace pull toward the initial joint positions
 _NULLSPACE_KP = 10.
-# sign of each finger's control change as the gripper closes
+# sign of each finger's control change as the Panda gripper closes
 _GRIP_SIGN = np.array([-1., 1.], np.float32)
 
 
@@ -75,7 +75,7 @@ _PROPRIO_V14 = (
 
 
 class Arm:
-    """Controller parameters and model indices for one OSC_POSE arm and its Panda gripper."""
+    """Controller parameters and model indices for one OSC_POSE arm and its two-finger gripper."""
     def __init__(self, spec, m):
         """Arm of `spec`, a task's "arms" entry in tasks.json, in model `m`."""
         self.prefix = spec["prefix"]
@@ -113,6 +113,7 @@ class Arm:
         self.arm_ctrl_lo, self.arm_ctrl_hi = jnp.asarray(m.actuator_ctrlrange[self.actuators].T, jnp.float32)
         self.grip_ctrl_lo, self.grip_ctrl_hi = jnp.asarray(m.actuator_ctrlrange[self.grip_actuators].T, jnp.float32)
         self.grip_speed = spec["grip_speed"]
+        self.grip_sign = np.asarray(spec.get("grip_sign", _GRIP_SIGN), np.float32)
         self.grip_substeps = spec.get("grip_substeps", 1)
         self.proprio_keys = spec.get("proprio", _PROPRIO_V15)
 
@@ -171,21 +172,21 @@ class Arm:
 
     def grip_closure(self, d):
         """How far the gripper is commanded closed, from 0 (open) to 1 (closed), by its actuator controls."""
-        open_ctrl, closed_ctrl = self.grip_ctrl(-_GRIP_SIGN), self.grip_ctrl(_GRIP_SIGN)
+        open_ctrl, closed_ctrl = self.grip_ctrl(-self.grip_sign), self.grip_ctrl(self.grip_sign)
         share = (d.ctrl[self.grip_actuators] - open_ctrl) / (closed_ctrl - open_ctrl)
         return jnp.clip(jnp.mean(share), 0., 1.)
 
     def step_grip(self, grip, action):
-        """Advance the Panda gripper's open / close state by one policy step."""
+        """Advance the gripper's open / close state by one policy step."""
         return self.substep_grip(grip, action, self.grip_substeps - 1)
 
     def substep_grip(self, grip, action, substep):
         """
-        The Panda gripper's open / close state during substep `substep` of a policy step from state `grip`: it moves
+        The gripper's open / close state during substep `substep` of a policy step from state `grip`: it moves
         `grip_speed` in each of the step's first `grip_substeps` substeps.
         """
         moves = jnp.minimum(substep + 1, self.grip_substeps)
-        return jnp.clip(grip + _GRIP_SIGN * self.grip_speed * moves * jnp.sign(action[self.grip_action]), -1., 1.)
+        return jnp.clip(grip + self.grip_sign * self.grip_speed * moves * jnp.sign(action[self.grip_action]), -1., 1.)
 
     def grip_ctrl(self, grip):
         """Gripper actuator controls at open/close state `grip`."""

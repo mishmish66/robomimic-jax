@@ -51,8 +51,11 @@ class Transferred(NamedTuple):
     last: np.ndarray  # flattened state after the last action
 
 
-def _contact_success(m, flat, pairs):
-    """Whether, at flattened state `flat` of `m`, every (geoms, geoms) pair of `pairs` is in contact."""
+def _contact_success(m, flat, pairs, joints=()):
+    """
+    Whether, at flattened state `flat` of `m`, every (geoms, geoms) pair of `pairs` is in contact and every joint of
+    the (joint, value) pairs `joints` is above its value.
+    """
     d = mujoco.MjData(m)
     d.qpos[:], d.qvel[:] = flat[1:1 + m.nq], flat[1 + m.nq:1 + m.nq + m.nv]
     mujoco.mj_forward(m, d)
@@ -60,11 +63,15 @@ def _contact_success(m, flat, pairs):
     return all(
         any(frozenset((m.geom(a).id, m.geom(b).id)) in touching for a in first for b in second)
         for first, second in pairs
-    )
+    ) and all(d.qpos[m.jnt_qposadr[m.joint(joint).id]] > value for joint, value in joints)
 
 
-# tasks whose success is checked on each demo's own model, by MuJoCo contacts between these geom groups
-_CONTACT_SUCCESS = {"transport": (("target_bin_geoms", "payload_geoms"), ("trash_bin_geoms", "trash_geoms"))}
+# tasks whose success depends on geometry that differs between demos, checked on each demo's own model by MuJoCo:
+# the task spec's geom groups that must touch, and its joints that must be above its values
+_CONTACT_SUCCESS = {
+    "transport": ((("target_bin_geoms", "payload_geoms"), ("trash_bin_geoms", "trash_geoms")), ()),
+    "hammer_cleanup_d1": ((("drawer_bottom", "hammer_geoms"),), (("slide", "drawer_closed"),)),
+}
 
 
 class Transfer:
@@ -82,14 +89,27 @@ class Transfer:
         for arm in env.arms:
             arm_dims[arm.arm_action] = 1.
 
-        def rollout(flat, grip, q0, actions):
+        def rollout(varying, flat, grip, q0, memory, actions):
+            """
+            Rollout of `actions` from flattened state `flat`, in the demo's model with the model leaves `varying`
+            ({leaf index: value}) of the world's own.
+            """
             def step(state, action):
                 next_state = env.step(None, state, action)
                 d = next_state.data
                 flat = jnp.concatenate([d.time[None], d.qpos, d.qvel])
-                return next_state, (flat, env.success(next_state), env.reward(None, state, action, next_state))
-            start = env.state_from_flat(flat)._replace(grip=grip, q0=q0)
-            return jax.lax.scan(step, start, actions)[1]
+                reward = env.reward(None, state, action, next_state)
+                return next_state, (flat, next_state.memory, env.success(next_state), reward)
+            simulated = env._mx
+            leaves = jax.tree_util.tree_leaves(simulated)
+            for i, x in varying.items():
+                leaves[i] = x
+            env._mx = jax.tree_util.tree_unflatten(self._tree, leaves)
+            try:
+                start = env.state_from_flat(flat)._replace(grip=grip, q0=q0, memory=memory)
+                return jax.lax.scan(step, start, actions)[1]
+            finally:
+                env._mx = simulated
 
         def cost(flats, targets, mask):
             q, target = flats[..., 1:1 + nq], targets[:, 1:1 + nq]
@@ -99,16 +119,29 @@ class Transfer:
             joint = _JOINT_WEIGHT * jnp.sum((q[..., joints] - target[:, joints]) ** 2, -1) / _JOINT_SCALE ** 2
             return jnp.sum((position + angle + joint) * mask, -1)
 
-        def transfer(model, states, actions, grips, q0, length, key, noise):
-            simulated, env._mx = env._mx, model
-            try:
-                return _transfer(states, actions, grips, q0, length, key, noise)
-            finally:
-                env._mx = simulated
+        def compile(varying):
+            """
+            The jitted transfer of a batch of demos whose models differ in the leaves with indices `varying`. MuJoCo
+            Warp indexes a batched model field by world modulo its batch, so each sampled world gets its own copy of
+            those leaves.
+            """
+            def transfer(model, states, actions, grips, q0, length, key, noise):
+                simulated, env._mx = env._mx, model
+                try:
+                    return _transfer(states, actions, grips, q0, length, key, noise)
+                finally:
+                    env._mx = simulated
 
-        def _transfer(states, actions, grips, q0, length, key, noise):
+            def _transfer(states, actions, grips, q0, length, key, noise):
+                leaves = jax.tree_util.tree_leaves(env._mx)
+                per_world = {i: jnp.broadcast_to(leaves[i], (samples,) + leaves[i].shape) for i in varying}
+                return _chunks(per_world, states, actions, grips, q0, length, key, noise)
+
+            return jax.jit(jax.vmap(transfer, in_axes=(0, 0, 0, 0, 0, 0, 0, None)))
+
+        def _chunks(per_world, states, actions, grips, q0, length, key, noise):
             def chunk(carry, c):
-                flat, key = carry
+                flat, memory, key = carry
                 t = c * commit
                 targets = jax.lax.dynamic_slice_in_dim(states, t + 1, horizon)
                 mask = (t + jnp.arange(horizon) < length).astype(jnp.float32)
@@ -118,10 +151,13 @@ class Transfer:
                     key, sub = jax.random.split(key)
                     perturbation = scale * jax.random.normal(sub, (samples, horizon, action_dim)) * arm_dims
                     candidates = jnp.clip(mean + perturbation.at[0].set(0.), -1., 1.)
-                    flats, success, reward = jax.vmap(rollout, in_axes=(None, None, None, 0))(flat, grips[t], q0, candidates)
+                    flats, memories, success, reward = jax.vmap(rollout, in_axes=(0, None, None, None, None, 0))(
+                        per_world, flat, grips[t], q0, memory, candidates,
+                    )
                     costs = cost(flats, targets, mask)
                     best = jnp.argmin(jnp.where(jnp.isnan(costs), jnp.inf, costs))
-                    return key, (costs[best], candidates[best], flats[best], success[best], reward[best])
+                    memories = jax.tree.map(lambda x: x[best], memories)
+                    return key, (costs[best], candidates[best], flats[best], memories, success[best], reward[best])
 
                 key, best = search(key, jax.lax.dynamic_slice_in_dim(actions, t, horizon), noise)
                 for i in range(1, iterations):
@@ -137,14 +173,15 @@ class Transfer:
                     key, best = search(key, best[1], noise * 1.5 ** (r + 1))
                     return r + 1, key, best
 
-                _, key, (_, chosen, flats, success, reward) = jax.lax.while_loop(drifting, again, (0, key, best))
+                _, key, (_, chosen, flats, memories, success, reward) = jax.lax.while_loop(drifting, again, (0, key, best))
                 kept = (flats[:commit], chosen[:commit], reward[:commit], success[:commit])
-                return (flats[commit - 1], key), kept
+                return (flats[commit - 1], jax.tree.map(lambda x: x[commit - 1], memories), key), kept
             chunks = (actions.shape[0] - horizon) // commit
-            _, outputs = jax.lax.scan(chunk, (states[0], key), jnp.arange(chunks))
+            memory = env.state_from_flat(states[0]).memory
+            _, outputs = jax.lax.scan(chunk, (states[0], memory, key), jnp.arange(chunks))
             return tuple(x.reshape(-1, *x.shape[2:]) for x in outputs)
 
-        self._transfer = jax.jit(jax.vmap(transfer, in_axes=(0, 0, 0, 0, 0, 0, 0, None)))
+        self._compile, self._transfers = compile, {}
 
     def _grips(self, actions):
         """Gripper controller state before each action."""
@@ -167,6 +204,11 @@ class Transfer:
         in the MJX models `models`, with arm action perturbations of standard deviation `noise`.
         """
         stacked = jax.tree_util.tree_map(lambda *x: jnp.stack(x), *models)
+        leaves = jax.tree_util.tree_leaves(stacked)
+        differs = jax.device_get([jnp.any(x != x[:1]) for x in leaves])
+        varying = tuple(i for i, d in enumerate(differs) if d)
+        if varying not in self._transfers:
+            self._transfers[varying] = self._compile(varying)
         steps = -(-max(len(a) for _, a in demos) // _LENGTH_BUCKET) * _LENGTH_BUCKET
         padded = steps + self.horizon
         states = np.stack([_pad(s, padded + 1) for s, _ in demos]).astype(np.float32)
@@ -175,7 +217,7 @@ class Transfer:
         q0 = tuple(np.stack([s[0][1:][arm.qpos] for s, _ in demos]).astype(np.float32) for arm in self.env.arms)
         lengths = np.array([len(a) for _, a in demos])
         keys = jax.random.split(key, len(demos))
-        outputs = self._transfer(stacked, states, actions, grips, q0, lengths, keys, jnp.float32(noise))
+        outputs = self._transfers[varying](stacked, states, actions, grips, q0, lengths, keys, jnp.float32(noise))
         flats, chosen, rewards, success = (np.asarray(x) for x in outputs)
         return [
             Transferred(
@@ -242,10 +284,13 @@ def transfer_dataset(dataset, output, *, samples=(32, 256), iterations=(1, 2), h
         names = names[:limit]
     models = {name: source[f"data/{name}"].attrs["model_file"] for name in names}
     names.sort(key=lambda n: len(source[f"data/{n}/actions"]))
-    contact_pairs = None
+    contact_pairs, contact_joints = None, ()
     if task in _CONTACT_SUCCESS:
         spec = task_spec(task)["task"]
-        contact_pairs = [(spec[a], spec[b]) for a, b in _CONTACT_SUCCESS[task]]
+        group = lambda x: [x] if isinstance(x, str) else x
+        pairs, joints = _CONTACT_SUCCESS[task]
+        contact_pairs = [(group(spec[a]), group(spec[b])) for a, b in pairs]
+        contact_joints = [(spec[j], spec[v]) for j, v in joints]
 
     output = Path(output).expanduser()
     if shards > 1:
@@ -281,7 +326,7 @@ def transfer_dataset(dataset, output, *, samples=(32, 256), iterations=(1, 2), h
         xml = models[name]
         m = cpu_models.setdefault(xml, load_model(task, xml))
         after = np.concatenate([demo.states[1:], demo.last[None]])
-        success = np.array([_contact_success(m, flat, contact_pairs) for flat in after])
+        success = np.array([_contact_success(m, flat, contact_pairs, contact_joints) for flat in after])
         return demo._replace(success=bool(success.any()), rewards=success.astype(np.float64))
 
     written = set()

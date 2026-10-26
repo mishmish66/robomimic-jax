@@ -40,50 +40,116 @@ _PER_STEP = {
 }
 
 
-def pack_demos(hdf5_path, npz_path):
+# GitHub refuses files over 100 MB, so larger packed datasets are split into parts of at most this size
+PART_BYTES = 95 * 2 ** 20
+
+
+def packed_files(npz_path):
+    """The files of packed dataset `npz_path`: the file itself, or its parts `<stem>.part<i>.npz` in order."""
+    path = Path(npz_path).expanduser()
+    if path.exists():
+        return [path]
+    parts = sorted(path.parent.glob(f"{path.stem}.part*.npz"), key=lambda p: int(p.stem.rsplit(".part", 1)[1]))
+    if not parts:
+        raise FileNotFoundError(path)
+    return parts
+
+
+def packed_names(directory):
+    """Names of the packed datasets in `directory`, whole or in parts."""
+    return sorted({p.stem.split(".part")[0] for p in Path(directory).expanduser().glob("*.npz")})
+
+
+def _pack(f, names, hdf5_path):
+    demos = [f[f"data/{n}"] for n in names]
+    models = list(dict.fromkeys(d.attrs["model_file"] for d in demos))
+    packed = dict(
+        env_args=np.array(f["data"].attrs["env_args"]),
+        names=np.array(names),
+        lengths=np.array([len(d["actions"]) for d in demos]),
+        models=np.array(models),
+        model_index=np.array([models.index(d.attrs["model_file"]) for d in demos]),
+        success=np.array([bool(d.attrs.get("success", True)) for d in demos]),
+        origin=np.array([str(d.attrs.get("origin", "transferred")) for d in demos]),
+    )
+    annotations = sorted({k for d in demos for k, v in d.items() if isinstance(v, h5py.Dataset)} - set(_PER_STEP))
+    for key in (*_PER_STEP, *annotations):
+        values = np.concatenate([d[key][()] for d in demos])
+        packed[f"step/{key}"] = values.astype(_PER_STEP[key][0]) if key in _PER_STEP else values
+    for key in f.get("mask", {}):
+        packed[f"mask/{key}"] = np.array(get_demos_for_filter_key(hdf5_path, key))
+    return packed
+
+
+def pack_demos(hdf5_path, npz_path, part_bytes=PART_BYTES):
     """
     Writes the demos of robomimic dataset `hdf5_path` to compressed `npz_path`: per-step arrays concatenated
     over demos (states, actions, and rewards in float32), each distinct model xml once, masks, and
-    per-step annotations. Observations are not kept.
+    per-step annotations, and each demo's "origin" attribute: how its states were made ("transferred" when absent).
+    Observations are not kept. Above `part_bytes`, the demos are split in order over parts
+    `<stem>.part<i>.npz` of at most that size, each in the same format and with all the masks.
     """
+    path = Path(npz_path).expanduser()
+    for old in [path, *path.parent.glob(f"{path.stem}.part*.npz")]:
+        old.unlink(missing_ok=True)
     with h5py.File(Path(hdf5_path).expanduser(), "r") as f:
         names = sorted(f["data"], key=lambda k: int(k.removeprefix("demo_")))
-        demos = [f[f"data/{n}"] for n in names]
-        models = list(dict.fromkeys(d.attrs["model_file"] for d in demos))
-        packed = dict(
-            env_args=np.array(f["data"].attrs["env_args"]),
-            names=np.array(names),
-            lengths=np.array([len(d["actions"]) for d in demos]),
-            models=np.array(models),
-            model_index=np.array([models.index(d.attrs["model_file"]) for d in demos]),
-            success=np.array([bool(d.attrs.get("success", True)) for d in demos]),
-        )
-        annotations = sorted({k for d in demos for k, v in d.items() if isinstance(v, h5py.Dataset)} - set(_PER_STEP))
-        for key in (*_PER_STEP, *annotations):
-            values = np.concatenate([d[key][()] for d in demos])
-            packed[f"step/{key}"] = values.astype(_PER_STEP[key][0]) if key in _PER_STEP else values
-        for key in f.get("mask", {}):
-            packed[f"mask/{key}"] = np.array(get_demos_for_filter_key(hdf5_path, key))
-    np.savez_compressed(Path(npz_path).expanduser(), **packed)
+        np.savez_compressed(path, **_pack(f, names, hdf5_path))
+        if path.stat().st_size <= part_bytes:
+            return
+        steps = np.cumsum([f[f"data/{n}"].attrs["num_samples"] for n in names])
+        count = -(-path.stat().st_size // part_bytes)
+        path.unlink()
+        while True:
+            bounds = np.searchsorted(steps, steps[-1] * np.arange(1, count) / count) + 1
+            chunks = np.split(np.array(names), bounds)
+            parts = [path.with_name(f"{path.stem}.part{i}.npz") for i in range(count)]
+            for part, chunk in zip(parts, chunks):
+                np.savez_compressed(part, **_pack(f, list(chunk), hdf5_path))
+            if all(p.stat().st_size <= part_bytes for p in parts):
+                return
+            for part in parts:
+                part.unlink()
+            count += 1
+
+
+def read_packed(npz_path):
+    """The arrays of packed dataset `npz_path`, its parts joined, as one packed file holds them."""
+    joined, models = {}, []
+    for part in packed_files(npz_path):
+        with np.load(part) as packed:
+            offset = len(models)
+            models += list(packed["models"])
+            for key in packed.files:
+                if key in ("env_args", "models") or key.startswith("mask/"):
+                    joined.setdefault(key, packed[key])
+                    continue
+                value = packed[key] + offset if key == "model_index" else packed[key]
+                joined[key] = np.concatenate([joined[key], value]) if key in joined else value
+    joined["models"] = np.array(models)
+    return joined
 
 
 def unpack_demos(npz_path, hdf5_path):
     """Writes the demos packed in `npz_path` as robomimic dataset `hdf5_path`, without observations."""
-    with np.load(Path(npz_path).expanduser()) as packed, h5py.File(Path(hdf5_path).expanduser(), "w") as f:
+    packed = read_packed(npz_path)
+    with h5py.File(Path(hdf5_path).expanduser(), "w") as f:
         data = f.create_group("data")
         data.attrs["env_args"] = str(packed["env_args"])
         lengths = packed["lengths"]
         data.attrs["total"] = int(lengths.sum())
         starts = np.concatenate([[0], np.cumsum(lengths)])
-        steps = {k.removeprefix("step/"): packed[k] for k in packed.files if k.startswith("step/")}
+        steps = {k.removeprefix("step/"): packed[k] for k in packed if k.startswith("step/")}
         for i, name in enumerate(packed["names"]):
             demo = data.create_group(str(name))
             demo.attrs["model_file"] = str(packed["models"][packed["model_index"][i]])
             demo.attrs["num_samples"] = int(lengths[i])
             demo.attrs["success"] = bool(packed["success"][i])
+            if "origin" in packed:
+                demo.attrs["origin"] = str(packed["origin"][i])
             for key, values in steps.items():
                 value = values[starts[i]:starts[i + 1]]
                 demo.create_dataset(key, data=value.astype(_PER_STEP[key][1]) if key in _PER_STEP else value)
-        for key in packed.files:
+        for key in packed:
             if key.startswith("mask/"):
                 f[key] = packed[key].astype("S")

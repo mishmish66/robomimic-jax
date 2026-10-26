@@ -31,7 +31,15 @@ MIMICGEN_HF_REPO_ID = "amandlek/mimicgen_datasets"
 MIMICGEN_DATA_DIR = Path(os.environ.get("MIMICGEN_DATA", "~/data/mimicgen")).expanduser()
 # path in the MimicGen Hugging Face repo, and under MIMICGEN_DATA_DIR, of each ported task's generated dataset, which
 # holds both states and low-dim observations
-MIMICGEN_DATASETS = {task: f"core/{task}.hdf5" for task in ("stack_d0", "coffee_d0", "threading_d0")}
+MIMICGEN_DATASETS = {
+    task: f"core/{task}.hdf5" for task in (
+        "stack_d0", "stack_d1", "stack_three_d0", "stack_three_d1", "square_d0", "square_d1", "square_d2",
+        "threading_d0", "threading_d1", "threading_d2", "coffee_d0", "coffee_d1", "coffee_d2",
+        "three_piece_assembly_d0", "three_piece_assembly_d1", "three_piece_assembly_d2", "hammer_cleanup_d0",
+        "hammer_cleanup_d1", "mug_cleanup_d0", "mug_cleanup_d1", "kitchen_d0", "kitchen_d1", "nut_assembly_d0",
+        "pick_place_d0", "coffee_preparation_d0", "coffee_preparation_d1",
+    )
+}
 
 
 def download_file_from_hf(repo_id, filename, download_dir, check_overwrite=True):

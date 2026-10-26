@@ -25,7 +25,15 @@ import robosuite
 import mimicgen.envs.robosuite  # noqa: F401  registers MimicGen's environments
 
 DATA_DIR = Path(os.environ.get("MIMICGEN_DATA", "~/data/mimicgen")).expanduser()
-DATASETS = {task: f"core/{task}.hdf5" for task in ("stack_d0", "coffee_d0", "threading_d0")}
+DATASETS = {
+    task: f"core/{task}.hdf5" for task in (
+        "stack_d0", "stack_d1", "stack_three_d0", "stack_three_d1", "square_d0", "square_d1", "square_d2",
+        "threading_d0", "threading_d1", "threading_d2", "coffee_d0", "coffee_d1", "coffee_d2",
+        "three_piece_assembly_d0", "three_piece_assembly_d1", "three_piece_assembly_d2", "hammer_cleanup_d0",
+        "hammer_cleanup_d1", "mug_cleanup_d0", "mug_cleanup_d1", "kitchen_d0", "kitchen_d1", "nut_assembly_d0",
+        "pick_place_d0", "coffee_preparation_d0", "coffee_preparation_d1",
+    )
+}
 
 
 def main(args):
@@ -45,6 +53,8 @@ def main(args):
             for flat in states:
                 env.sim.set_state_from_flattened(flat)
                 env.sim.forward()
+                if hasattr(env, "_post_process"):
+                    env._post_process()  # the stove's switch state, which Kitchen keeps outside the simulator
                 demo_rewards.append(round(float(env.reward()), 7))
             rewards[task][name] = demo_rewards
         print(f"{task}: {', '.join(f'{n} ({len(r)} states)' for n, r in rewards[task].items())}", flush=True)

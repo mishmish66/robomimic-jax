@@ -21,6 +21,7 @@ import jax.numpy as jnp
 import mujoco
 
 from robomimic.data import registry
+from robomimic.data.hdf5 import read_packed
 from robomimic.env import Pixels, RobomimicPOMDP, load_model, parked_joints
 
 DATASETS = {"lift": "lift/ph", "can": "can/ph", "square": "square/mh", "transport": "transport/ph", "tool_hang": "tool_hang/ph"}
@@ -112,7 +113,8 @@ def fidelity(task, demos, windows):
 def transferred(task):
     """Success of the transferred demos, and how far their objects get from the recorded trajectories."""
     name = DATASETS[task].replace("/", "_")
-    with np.load(PACKED / f"{name}.npz") as packed, h5py.File(dataset_path(task), "r") as f:
+    packed = read_packed(PACKED / f"{name}.npz")
+    with h5py.File(dataset_path(task), "r") as f:
         starts = np.concatenate([[0], np.cumsum(packed["lengths"])])
         models = {}
         largest, final = [], []

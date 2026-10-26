@@ -4,10 +4,11 @@
 > [robomimic](https://github.com/ARISE-Initiative/robomimic):** an AI-written port, not affiliated with or
 > endorsed by their authors. Credit for the tasks, robots, and demonstrations is theirs.
 
-robomimic's five tasks (Lift, Can, Square, Transport, Tool Hang) and three MimicGen tasks (Stack, Coffee,
-Threading) as [jax_pomdps](https://github.com/mishmish66/jax-pomdps) POMDPs on MuJoCo Warp, with the human
-demonstrations of every robomimic v1.5 ph and mh dataset, and MimicGen's D0 datasets of those three tasks,
-transferred into them.
+robomimic's five tasks (Lift, Can, Square, Transport, Tool Hang) and MimicGen's 26 task variants (Stack, Stack
+Three, Square, Threading, Coffee, Three Piece Assembly, Hammer Cleanup, Mug Cleanup, Kitchen, Nut Assembly, Pick
+Place, Coffee Preparation, at their D0 to D2 initial-state distributions) as
+[jax_pomdps](https://github.com/mishmish66/jax-pomdps) POMDPs on MuJoCo Warp, with the human demonstrations of
+every robomimic v1.5 ph and mh dataset, and MimicGen's core datasets of every variant, transferred into them.
 
 **[Documentation](https://mishmish66.github.io/robomimic-jax/)**: the tasks, the data, and the API.
 

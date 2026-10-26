@@ -164,43 +164,189 @@ demonstrations hold it.
 
 ## MimicGen tasks
 
-Three tasks of [MimicGen](https://github.com/NVlabs/mimicgen), at their D0 initial-state distributions, are made the
-same way: `stack-d0`, `coffee-d0`, and `threading-d0`. MimicGen recorded them on robosuite v1.4 (the commit its
-installation guide pins), and they follow that version where it differs from v1.5:
+The tasks of [MimicGen](https://github.com/NVlabs/mimicgen) are made the same way, one for each of its initial-state
+distributions (D0, D1, D2): `stack-d0`, `stack-d1`, `stack-three-d0`, `stack-three-d1`, `square-d0`, `square-d1`,
+`square-d2`, `threading-d0`, `threading-d1`, `threading-d2`, `coffee-d0`, `coffee-d1`, `coffee-d2`,
+`three-piece-assembly-d0`, `three-piece-assembly-d1`, `three-piece-assembly-d2`, `hammer-cleanup-d0`,
+`hammer-cleanup-d1`, `mug-cleanup-d0`, `mug-cleanup-d1`, `kitchen-d0`, `kitchen-d1`, `nut-assembly-d0`,
+`pick-place-d0`, `coffee-preparation-d0`, and `coffee-preparation-d1`. Their `/pix` variants observe `agentview` and
+`robot0_eye_in_hand` at 84×84, the cameras of MimicGen's datasets. MimicGen recorded all of them on robosuite v1.4
+(the commit its installation guide pins), and they follow that version where it differs from v1.5:
 
 - **Gripper**: the open / close state moves 0.01 in each of a step's 25 substeps, rather than 0.2 once per step.
 - **Proprioception**: `robot<i>_eef_vel_lin` and `_eef_vel_ang`, the linear and angular velocity of the hand body,
   in place of `_eef_quat_site`.
 - **Object poses relative to the gripper** are those of the current state, as MimicGen's datasets record them, with
-  the gripper's position from its grip site and its orientation from its hand body.
-- **Dense reward**: none of them has robosuite's progress conventions upstream, so each defines its own stages below.
+  the gripper's position from its grip site and its orientation from its hand body. Each object's block of the
+  object observation is its position, quaternion, and pose relative to the gripper, in that order.
+- **Dense reward**: Square, NutAssembly, and PickPlace use the stages of `square` and `can`; the other tasks have no
+  robosuite progress conventions upstream, so each defines its own stages below.
 
-### `stack-d0`
+They also differ from the robomimic tasks in these ways:
 
-A Panda arm stacks a red cube on a green one, both placed at random on the table. **Success**: the red cube is not
-grasped, its center is more than 4 cm above the table, and it touches the green cube. **Object observation** (23):
-each cube's position and quaternion, each cube's position relative to the gripper, and the green cube's position
-relative to the red one. **Dense reward**: reaching and holding the red cube, lifting it over the green cube, and
-lowering it onto it; a red cube released resting on the green one counts as held. **Shaped reward**: robosuite's
-staged reward, halved.
+- **Robot**: NutAssembly D0 and PickPlace D0 use a Sawyer arm with the Rethink gripper; all other MimicGen tasks use a
+  Panda arm. The sparse rewards of these two in MimicGen's datasets are fractional, the share of objects placed (0.5 per
+  nut, 0.25 per object), and `/sparse` reproduces them; `success` is all objects placed.
+- **Models**: some variants change the model between resets in MimicGen: Square D1 and D2 the peg's pose, MugCleanup D1
+  the drawer's pose, Kitchen D1 the poses of the stove, the button, and the serving region, HammerCleanup D1 the
+  cabinet's pose, and HammerCleanup the hammer's size, mass, and handle friction. Each reset of the POMDP sets the
+  fixture poses recorded with its initial state, per world; the `/mkv` observation includes them. The hammer is the
+  one of the task's own model in every reset. A dataset demo is simulated in its own `model_file` (`model_xml`).
+- **Memory**: Kitchen's success needs a flag that robosuite keeps outside the simulator state: whether the stove has
+  been on with the pot on the burner and the bread in the pot. The POMDP keeps it as the task's memory in the state,
+  and the `/mkv` observation includes it.
+- **Force observations**: HammerCleanup and Kitchen have the extra low-dim keys `robot0_eef_force_norm`, the norm of the
+  gripper's force sensor, and `robot0_contact`, whether that norm is above 2 N. robosuite subtracts a bias it sets at
+  the first step of a live episode; in the datasets the bias is 0, and the POMDP uses none.
 
-### `coffee-d0`
+### `stack-d0`, `stack-d1`
 
-A Panda arm puts a coffee pod into a coffee machine's pod holder and closes the machine's lid. The machine stands at a
-fixed pose with its lid open; the pod starts at random within a 6 cm square. **Success**: the lid is within 15 degrees
-of closed, and the pod is within 5.2 mm of the holder's axis, above the holder's floor, and below the lid.
-**Object observation** (57): for the pod, the machine, the pod holder, and the lid, the position, quaternion, and
-pose relative to the gripper, then the lid's hinge angle; the low-dim observation also holds the grip site's pose
-relative to the pod and to the pod holder (`robot0_eef_pos_rel_pod`, `_quat_rel_pod`, `_pos_rel_pod_holder`,
-`_quat_rel_pod_holder`). **Dense reward**: half for the pod, reaching it, holding it, lifting it over the holder,
-and lowering it in, a pod released in the holder counting as held; half for closing the lid once the pod is in.
+A Panda arm stacks a red cube on a green one, both placed at random on the table, at any yaw, within 8 cm of its
+center in D0 and 20 cm in D1. **Success**: the red cube is not grasped, its center is more than 4 cm above the table,
+and it touches the green cube. **Object observation** (23): each cube's position and quaternion, each cube's position
+relative to the gripper, and the green cube's position relative to the red one. **Dense reward**: reaching and holding
+the red cube, lifting it over the green cube, and lowering it onto it; a red cube released resting on the green one
+counts as held. **Shaped reward**: robosuite's staged reward, halved.
 
-### `threading-d0`
+### `stack-three-d0`, `stack-three-d1`
 
-A Panda arm threads a needle through the ring of a tripod. The needle lies at random on the table; the tripod stands
-at a fixed pose. **Success**: the center of the needle's bar is within 12 mm of the ring's center. **Object
-observation** (28): for the needle and the tripod, the position, quaternion, and pose relative to the gripper.
-**Dense reward**: reaching the needle's handle, holding the needle, and bringing its bar's center to the ring's.
+A Panda arm stacks cube A (4 cm) on cube B (5 cm), then cube C (4 cm) on cube A. The three cubes are placed at random
+on the table, at any yaw, within 10 cm of its center in D0 and 20 cm in D1. **Success**: neither cube A nor cube C is
+grasped, A's center is more than 4 cm above the table and A touches B, and C's center is more than 8 cm above the table
+and C touches A. **Object observation** (39): Stack's 23 entries, then cube C's position and quaternion, its position
+relative to the gripper and to cube A, and cube B's position relative to cube C. **Dense reward**: half for stacking
+cube A on cube B, as in `stack-d0`; half, once A is released on B, for stacking cube C on A.
+
+### `square-d0`, `square-d1`, `square-d2`
+
+`square` at MimicGen's initial states: a Panda arm slides the square nut down over the square peg. In D0 the nut and
+peg start as in `square`. In D1 the peg stands at random in a 40 cm square and the round peg is removed; the nut starts
+at random in a 23 × 51 cm region, at any yaw, more than 13 cm from the peg. In D2, also without the round peg, the nut
+and the peg each start at random within 25 cm of the table's center in x and y, the peg at a yaw in [0°, 90°]. **Success**: as in `square`.
+**Object observation**: 14 in D0, the nut's position, quaternion, and pose relative to the gripper; 17 in D1 and D2,
+which add the peg's position. **Dense reward**: as in `square`. **Shaped reward**: robosuite's staged reward.
+
+### `threading-d0`, `threading-d1`, `threading-d2`
+
+A Panda arm threads a needle through the ring of a tripod. In D0 the needle lies at random in a 15 × 10 cm region,
+at a yaw in [−120°, −60°], and the tripod stands at a fixed pose. In D1 the needle lies in a 25 × 10 cm region at a
+yaw over a 240° range, and the tripod stands at random in a 25 × 10 cm region on the robot's right, at a yaw over a
+120° range. D2 is D1 with the needle on the robot's right and the tripod on its left, at a yaw in [−150°, −30°].
+**Success**: the center of the needle's bar is within 12 mm of the ring's center. **Object observation** (28): for the needle and the tripod, the
+position, quaternion, and pose relative to the gripper. **Dense reward**: reaching the needle's handle, holding the
+needle, and bringing its bar's center to the ring's.
+
+### `coffee-d0`, `coffee-d1`, `coffee-d2`
+
+A Panda arm puts a coffee pod into a coffee machine's pod holder and closes the machine's lid; the lid starts open. In
+D0 the machine stands at a fixed pose and the pod starts at random within a 6 cm square. In D1 the machine stands at
+random in a 10 cm square on the robot's right, at a yaw in [−30°, 60°], and the pod starts in a 25 × 13 cm region on
+its left. D2 places the machine in a 10 cm square on the robot's left, at a yaw in [120°, 210°], and the pod in a
+25 × 13 cm region on its right. **Success**: the lid is within 15 degrees of closed, and the pod is within 5.2 mm of the
+holder's axis, above the holder's floor, and below the lid. **Object observation** (57): for the pod, the machine, the
+pod holder, and the lid, the position, quaternion, and pose relative to the gripper, then the lid's hinge angle; the
+low-dim observation also holds the grip site's pose relative to the pod and to the pod holder
+(`robot0_eef_pos_rel_pod`, `_quat_rel_pod`, `_pos_rel_pod_holder`, `_quat_rel_pod_holder`). **Dense reward**: half for
+the pod, reaching it, holding it, lifting it over the holder, and lowering it in, a pod released in the holder counting
+as held; half for closing the lid once the pod is in.
+
+### `three-piece-assembly-d0`, `three-piece-assembly-d1`, `three-piece-assembly-d2`
+
+A Panda arm drops piece 1, a square slab with a ridge on top, into the square hole of a base frame, then sets piece 2,
+which has a slot between two legs, over piece 1's ridge. In D0 the base lies at the table's center and the two pieces
+at random within 22 cm of it in x and y, clear of the base and of each other, turned to fit. In D1 the base also lies
+at random within 22 cm of the center. In D2 the base is also turned by up to 45 degrees and each piece by up to 90
+degrees from its D1 yaw, so the pieces must be turned to fit. **Success**: piece 1 is within 2 cm of the base's center horizontally and not grasped, and piece 2
+is within 2 cm of piece 1 horizontally, its center within 2 cm of 8 cm above the base's, and not grasped. **Object
+observation** (42): for the base, piece 1, and piece 2, the position, quaternion, and pose relative to the gripper; the
+low-dim observation also holds the grip site's pose relative to each (`robot0_eef_pos_rel_base`, `_quat_rel_base`,
+`_pos_rel_piece_1`, `_quat_rel_piece_1`, `_pos_rel_piece_2`, `_quat_rel_piece_2`). **Dense reward**: half for piece 1:
+reaching its ridge, holding it, lifting it over the base, moving it over the hole and fitting it (level, and centered and
+turned so it passes through the hole), in equal parts, both counting only as far as it is lifted, and lowering it in;
+half, once piece 1 rests in the base, for piece 2, carried the same way onto piece 1's ridge. A piece released within
+3 cm of its goal horizontally, resting there or falling into it from within 5 cm while it fits, counts as held.
+
+### `hammer-cleanup-d0`, `hammer-cleanup-d1`
+
+A Panda arm pulls a drawer open, puts a hammer into it, and pushes the drawer closed. In D0 the drawer's cabinet stands
+at a fixed pose and the hammer lies at random in an 8 × 7 cm region, its handle along the x axis. In D1 the cabinet
+stands at random in a 20 × 10 cm region, at a yaw in [−30°, 30°], and the hammer lies in a 40 × 12 cm
+region, its handle pointing in any direction. **Success**: the drawer is within 1 cm of closed and the hammer is in it:
+in D0, the hammer's center is between 0.94 and 1.0 m high and its y coordinate is above 0.22 m; in D1, the hammer touches the
+drawer's bottom. **Object observation** (28): for the hammer and the cabinet, the position, quaternion, and pose
+relative to the gripper; the low-dim observation also holds `robot0_eef_force_norm` and `robot0_contact`. **Dense
+reward**: a third each for pulling the drawer open, reaching its handle and opening it 10 cm; for the hammer, once the
+drawer is open more than 5 cm, reaching it, holding it, and carrying it onto the drawer's bottom, a hammer released
+within 15 cm above the bottom counting as held; and for reaching the handle and pushing the drawer closed.
+
+### `mug-cleanup-d0`, `mug-cleanup-d1`
+
+A Panda arm pulls a drawer open, puts a mug upright into it, and pushes the drawer closed. In D0 the drawer's cabinet
+stands at a fixed pose and the mug at random in a 30 × 15 cm region, at any yaw. In D1 the cabinet stands at random in
+a 20 × 10 cm region, at a yaw in [−30°, 30°], and the mug in a 40 × 15 cm region. **Success**: the drawer is
+within 1 cm of closed, the mug is within 2.6 degrees of upright, and it touches the drawer's bottom. **Object
+observation** (29): for the mug and the cabinet, the position, quaternion, and pose relative to the gripper, then the
+drawer's slide position. **Dense reward**: a quarter for reaching the drawer's handle and pulling the drawer 13 cm
+open; half for the mug, reaching it, holding it, lifting it over the open drawer, and lowering it onto the drawer's
+bottom, the carrying counting as far as the drawer is open, a mug released within 26 degrees of upright over the
+bottom, within 3 cm above resting, counting as held; a quarter, once the mug is in, for reaching the handle and pushing the drawer closed.
+
+### `kitchen-d0`, `kitchen-d1`
+
+A Panda arm turns on a stove by its button, puts a pot on the stove and a piece of bread in the pot, moves the pot into
+a serving region, and turns the stove off. In D0 the stove, the button, and the serving region are at fixed poses; the
+bread starts at random in a 3 × 6 cm region and the pot in a 0.5 × 2 cm region, dropped from 14 cm above its resting
+height, and the button's hinge starts at −0.4 rad, beyond its range of ±0.3 rad. In D1 the stove, the button, and the
+serving region stand at random in regions of up to 26 × 15 cm, the bread in a 20 × 20 cm region at a yaw in
+[−90°, 90°], the pot in a 10 × 15 cm region at a yaw in [−30°, 30°], and the button at −0.3 rad. **Success**: the
+stove is off, the bread touches the pot, the pot is within 5 cm in x, 10 cm in y, and 5 cm in height of the serving
+region's center, and the stove has been on with the pot on the burner and the bread touching the pot. The stove is on
+while the button's hinge is at 0 or above. **Object observation**: 56 in D0, for the stove, the bread, the pot, and
+the serving region, the position, quaternion, and pose relative to the gripper; 70 in D1, which adds the button's. The
+low-dim observation also holds `robot0_eef_force_norm` and `robot0_contact`. **Dense reward**: a fifth for each stage, in
+the demonstrations' order: reaching the button and turning the stove on; reaching, holding, and carrying the pot onto
+the stove; reaching, holding, and carrying the bread into the pot; carrying or pushing the pot into the serving region
+with the bread in it; and reaching the button and turning the stove off. The first three count as done once the stove
+has been on with the pot on it and the bread in the pot; a pot released over the stove, or bread released in the pot,
+counts as held.
+
+### `nut-assembly-d0`
+
+A Sawyer arm puts the square nut on the square peg and the round nut on the round peg, the nuts starting as in
+robosuite's NutAssembly. **Success**: each nut is within 3 cm of its peg horizontally, low on the peg, and the gripper
+has let go of it. **Sparse reward**: 0.5 per placed nut. **Object observation** (28): for each nut, the position,
+quaternion, and pose relative to the gripper. **Dense reward**: the mean over the nuts of each one's progress as in `square`
+(the round nut needing no fit through its hole), without the gripper's uprightness, counting only the nuts released at
+their pegs and the one other nut furthest along, that one scaled by how upright the gripper points. **Shaped reward**: robosuite's staged reward, scaled
+like the sparse reward.
+
+### `pick-place-d0`
+
+A Sawyer arm moves a milk carton, a loaf of bread, a cereal box, and a can from one bin into their compartments of the
+other, the objects starting at random in the first bin at yaws in [0°, 90°]. **Success**: each object is inside its
+compartment, below the bin's rim, and the gripper has let go of it. **Sparse reward**: 0.25 per placed object.
+**Object observation** (56): for the milk, the bread, the cereal, and the can, the position, quaternion, and pose
+relative to the gripper. **Dense reward**: the mean over the objects of each one's progress as in `can`, lowered to its
+own resting height, without the gripper's uprightness, counting only the objects released over their compartments,
+standing or not, and the one other object furthest along, that one scaled by how upright the gripper points. **Shaped reward**: robosuite's staged reward,
+scaled like the sparse reward.
+
+### `coffee-preparation-d0`, `coffee-preparation-d1`
+
+A Panda arm sets a mug upright on the coffee machine's base plate, opens the machine's lid, pulls a drawer open, takes
+the pod from the drawer, puts it into the pod holder, and closes the lid. The lid and the drawer start closed, and the
+pod lies at random in a 6 × 8 cm region of the drawer. In D0 the machine and the drawer's cabinet stand at fixed poses,
+and the mug at random in a 15 × 20 cm region, upright at a fixed yaw. In D1 the machine stands at random in a
+10 × 5 cm region, at a yaw in [−30°, 30°], and the mug in a 35 × 20 cm region at any yaw. **Success**: as in
+`coffee-d0`, and the mug is within 2.6 degrees of upright and touches the base plate. **Object observation** (86): for
+the pod, the machine, the pod holder, the lid, the cabinet, and the mug, the position, quaternion, and pose relative to
+the gripper, then the lid's hinge angle and the drawer's slide position; the low-dim observation also holds Coffee's
+`robot0_eef_pos_rel_pod`, `_quat_rel_pod`, `_pos_rel_pod_holder`, and `_quat_rel_pod_holder`. **Dense reward**, in the
+demonstrations' order, each stage's reaching counting once the stages before it are done: 0.25 for reaching the mug's
+rim, holding the mug, and carrying it onto the base plate under the holder; 0.1 for reaching the lid and opening it to
+1.5 rad; 0.1 for reaching the drawer's handle and pulling the drawer 19 cm open; 0.35 for the pod, as in `coffee-d0`;
+and 0.2 for closing the lid once the pod is in the holder. Opening the lid and the drawer count as done once the pod is
+held or in the holder.
 
 ## Training with PPO
 

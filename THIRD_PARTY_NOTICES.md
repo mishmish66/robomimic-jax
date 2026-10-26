@@ -60,20 +60,32 @@ for research or evaluation purposes only. <https://github.com/NVlabs/mimicgen>. 
 
 | file | ported from MimicGen |
 |---|---|
-| `src/robomimic/env/tasks.py` | the observations and success checks of `mimicgen/envs/robosuite/stack.py` (`Stack_D0`), `coffee.py` (`Coffee_D0`), and `threading.py` (`Threading_D0`) |
-| `src/robomimic/env/control.py` | robosuite v1.4's Panda gripper timing and proprioceptive observations, as MimicGen's datasets record them |
-| `src/robomimic/env/assets/models.zip` | the models `models/stack_d0.xml`, `coffee_d0.xml`, and `threading_d0.xml`, exported from MimicGen's environments, and the meshes of `mimicgen/models/robosuite/assets/` (`assets/objects/meshes/coffee_*.stl`), copied; MimicGen's license is in the archive as `LICENSE_MIMICGEN` |
-| `src/robomimic/env/assets/tasks.json`, `resets.npz` | the controller and task parameters of those three tasks, and initial states sampled from their reset distributions, exported from MimicGen's environments |
+| `src/robomimic/env/tasks.py` | the observations and success checks of the environments of `mimicgen/envs/robosuite/`: `stack.py` (`Stack_D0`, `Stack_D1`, `StackThree_D0`, `StackThree_D1`), `nut_assembly.py` (`Square_D0` to `_D2`, `NutAssembly_D0`), `threading.py` (`Threading_D0` to `_D2`), `coffee.py` (`Coffee_D0` to `_D2`, `CoffeePreparation_D0`, `_D1`), `three_piece_assembly.py` (`ThreePieceAssembly_D0` to `_D2`), `hammer_cleanup.py` (`HammerCleanup_D0`, `_D1`), `mug_cleanup.py` (`MugCleanup_D0`, `_D1`), `kitchen.py` (`Kitchen_D0`, `_D1`), and `pick_place.py` (`PickPlace_D0`) |
+| `src/robomimic/env/control.py` | robosuite v1.4's gripper timing and proprioceptive observations, as MimicGen's datasets record them |
+| `src/robomimic/env/assets/models.zip` | the models `models/<task>.xml` of those tasks, exported from MimicGen's environments, and the meshes and textures of `mimicgen/models/robosuite/assets/`, copied; MimicGen's license is in the archive as `LICENSE_MIMICGEN` |
+| `src/robomimic/env/assets/tasks.json`, `resets.npz` | the controller and task parameters of those tasks, and initial states sampled from their reset distributions, exported from MimicGen's environments |
 | `tests/mimicgen_shaped_rewards.py` | runs MimicGen and robosuite v1.4 themselves, installed when the script runs |
 
 MimicGen's datasets are released under CC-BY 4.0 (<https://huggingface.co/datasets/amandlek/mimicgen_datasets>).
-`datasets/warp/stack_d0.npz`, `coffee_d0.npz`, and `threading_d0.npz` are derived from their `core` datasets of
-those tasks: the same demos and models, each re-simulated in this repository's simulation.
+The `datasets/warp/` files named after MimicGen's tasks (`stack_d0.npz` to `coffee_preparation_d1.npz`) are derived
+from their `core` datasets of those tasks: the same demos and models, each re-simulated in this repository's
+simulation.
 Cite their paper:
 
 > Ajay Mandlekar, Soroush Nasiriany, Bowen Wen, Iretiayo Akinola, Yashraj Narang, Linxi Fan, Yuke Zhu, Dieter Fox.
 > "MimicGen: A Data Generation System for Scalable Robot Learning using Human Demonstrations." Conference on Robot
 > Learning (CoRL), 2023. <https://arxiv.org/abs/2310.17596>
+
+### robosuite-task-zoo (MIT)
+
+robosuite-task-zoo, © 2021 ARISE Initiative, MIT license (full text below).
+<https://github.com/ARISE-Initiative/robosuite-task-zoo>. MimicGen's Kitchen and HammerCleanup tasks build on its
+`KitchenEnv` and `HammerPlaceEnv`, at commit `74eab7f`.
+
+| file | from robosuite-task-zoo |
+|---|---|
+| `src/robomimic/env/tasks.py` | the observations and success checks of `environments/manipulation/kitchen.py` and `hammer_place.py` that MimicGen keeps |
+| `src/robomimic/env/assets/models.zip` | the mesh `task_zoo/models/kitchen/burnerplate.stl`, copied; robosuite-task-zoo's license is in the archive as `LICENSE_ROBOSUITE_TASK_ZOO` |
 
 ### MuJoCo, MJX, and MuJoCo Warp (Apache 2.0)
 
@@ -130,6 +142,32 @@ You may obtain a copy of the License at
 MIT License
 
 Copyright (c) 2021 Stanford Vision and Learning Lab
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### robosuite-task-zoo
+
+```
+MIT License
+
+Copyright (c) 2021 ARISE Initiative
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

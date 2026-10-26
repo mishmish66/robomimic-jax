@@ -5,11 +5,13 @@ datasets, which are looked up under $ROBOMIMIC_DATA/<task>/<type>/.
 from pathlib import Path
 
 import h5py
+import jax
 import numpy as np
 import pytest
 
 from robomimic.data import hdf5, registry
 from robomimic.data.observations import add_observations
+from robomimic.data.transfer import transfer_dataset
 from robomimic.env import TASK_OF_ENV_NAME, RobomimicPOMDP
 
 PACKED = Path(__file__).parent.parent / "datasets" / "warp"
@@ -50,6 +52,25 @@ def test_packed_demos_unpack_to_the_same_demos(lift_test_dataset, tmp_path):
             np.testing.assert_array_equal(demo["actions"][()], recorded["actions"][()].astype(np.float32))
             np.testing.assert_array_equal(demo["dones"][()], recorded["dones"][()])
 
+
+
+def test_packed_demos_split_into_parts_unpack_to_the_same_demos(lift_test_dataset, tmp_path):
+    hdf5.pack_demos(lift_test_dataset, tmp_path / "whole.npz")
+    hdf5.pack_demos(lift_test_dataset, tmp_path / "split.npz", part_bytes=(tmp_path / "whole.npz").stat().st_size // 3)
+    parts = hdf5.packed_files(tmp_path / "split.npz")
+    assert len(parts) > 1 and all(p.name.startswith("split.part") for p in parts)
+    assert hdf5.packed_names(tmp_path) == ["split", "whole"]
+    hdf5.unpack_demos(tmp_path / "whole.npz", tmp_path / "whole.hdf5")
+    hdf5.unpack_demos(tmp_path / "split.npz", tmp_path / "split.hdf5")
+    with h5py.File(tmp_path / "whole.hdf5", "r") as whole, h5py.File(tmp_path / "split.hdf5", "r") as split:
+        assert list(split["data"]) == list(whole["data"])
+        assert set(split["mask"]) == set(whole["mask"])
+        for key in whole["mask"]:
+            np.testing.assert_array_equal(split[f"mask/{key}"][()], whole[f"mask/{key}"][()])
+        for name in whole["data"]:
+            assert split[f"data/{name}"].attrs["model_file"] == whole[f"data/{name}"].attrs["model_file"]
+            for key in whole[f"data/{name}"]:
+                np.testing.assert_array_equal(split[f"data/{name}/{key}"][()], whole[f"data/{name}/{key}"][()])
 
 
 @pytest.mark.parametrize("name", TRANSFERRED)
@@ -95,3 +116,19 @@ def test_observations_of_states_are_those_of_the_pomdp(tmp_path):
         for key, value in env.observe(None, state, None).items():
             np.testing.assert_allclose(demo[f"obs/{key}"][t], np.asarray(value), atol=1e-6, err_msg=key)
             np.testing.assert_allclose(demo[f"next_obs/{key}"][t - 1], np.asarray(value), atol=1e-6, err_msg=key)
+
+
+def test_demos_transferred_together_are_each_simulated_in_their_own_model(tmp_path):
+    source = registry.MIMICGEN_DATA_DIR / registry.MIMICGEN_DATASETS["square_d1"]
+    if not source.exists():
+        pytest.skip(f"no {source}")
+    demos = ["demo_0", "demo_5"]
+    output = tmp_path / "transferred.hdf5"
+    transfer_dataset(source, output, samples=(32,), iterations=(1,), retries=0, worlds=256, demos=demos)
+    with h5py.File(output, "r") as transferred:
+        for name in demos:
+            demo = transferred[f"data/{name}"]
+            env = RobomimicPOMDP("square_d1", model_xml=demo.attrs["model_file"], max_worlds=len(demo["states"]))
+            states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"][()])
+            success = np.asarray(jax.vmap(env.success)(states))[1:]
+            np.testing.assert_array_equal(demo["rewards"][()][:-1] > 0, success, err_msg=name)

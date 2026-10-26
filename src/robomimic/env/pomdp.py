@@ -36,6 +36,7 @@ import jax_pomdps as pomdps
 import warp as wp
 
 from robomimic.env.control import Arm
+from robomimic.env.geometry import quat2mat, wxyz_to_xyzw
 from robomimic.env.render import CameraRenderer
 from robomimic.env.tasks import TASKS
 
@@ -63,8 +64,31 @@ _BUFFER_SIZES = {
     "tool_hang": (128, 1024),
     "transport": (192, 1024),
     "stack_d0": (32, 256),
+    "stack_d1": (32, 256),
+    "stack_three_d0": (64, 512),
+    "stack_three_d1": (64, 512),
     "coffee_d0": (128, 1024),
+    "coffee_d1": (128, 1024),
+    "coffee_d2": (128, 1024),
+    "coffee_preparation_d0": (192, 1024),
+    "coffee_preparation_d1": (192, 1024),
     "threading_d0": (64, 512),
+    "threading_d1": (64, 512),
+    "threading_d2": (64, 512),
+    "three_piece_assembly_d0": (256, 512),
+    "three_piece_assembly_d1": (256, 512),
+    "three_piece_assembly_d2": (256, 512),
+    "square_d0": (64, 512),
+    "square_d1": (64, 512),
+    "square_d2": (64, 512),
+    "nut_assembly_d0": (64, 512),
+    "pick_place_d0": (64, 512),
+    "mug_cleanup_d0": (192, 1024),
+    "mug_cleanup_d1": (192, 1024),
+    "hammer_cleanup_d0": (128, 1024),
+    "hammer_cleanup_d1": (128, 1024),
+    "kitchen_d0": (128, 1024),
+    "kitchen_d1": (128, 1024),
 }
 
 
@@ -161,14 +185,35 @@ TASK_OF_ENV_NAME = {s["env_name"]: t for t, s in _specs().items()}
 def load_model(task: str | None = None, model_xml: str | None = None) -> mujoco.MjModel:
     """
     MuJoCo model of `task`, or of a robosuite model xml such as a dataset demo's "model_file", whose asset
-    paths are resolved to the bundled meshes and textures.
+    paths are resolved to the bundled meshes and textures: robosuite's and MimicGen's from their `robosuite/`
+    directories, robosuite_task_zoo's under `task_zoo/`.
     """
     if model_xml is None:
         model_xml = _archive()[f"models/{task}.xml"].decode()
     model_xml = re.sub(
+        r'file="(?:[^"]*/)?robosuite_task_zoo/([^"]*)"', lambda match: f'file="task_zoo/{posixpath.normpath(match[1])}"',
+        model_xml,
+    )
+    model_xml = re.sub(
         r'file="(?:[^"]*/)?robosuite/([^"]*)"', lambda match: f'file="{posixpath.normpath(match[1])}"', model_xml
     )
-    return mujoco.MjModel.from_xml_string(model_xml, _archive())
+    # robosuite's base model counts only collision geoms (group 0) toward inertia, which saved model xmls drop
+    if "inertiagrouprange" not in model_xml:
+        model_xml = re.sub(r"<compiler\b", '<compiler inertiagrouprange="0 0"', model_xml, count=1)
+    # MuJoCo tells assets apart by file name alone, so each file is passed under its whole archive path, flattened
+    flat = lambda key: key.replace("/", "__")  # noqa: E731
+    files = set(re.findall(r'file="([^"]*)"', model_xml))
+    model_xml = re.sub(r'file="([^"]*)"', lambda match: f'file="{flat(match[1])}"', model_xml)
+    assets = {flat(k): v for k, v in _archive().items() if k in files}
+    while True:
+        try:
+            return mujoco.MjModel.from_xml_string(model_xml, assets)
+        except ValueError as error:
+            # meshes too thin for a solid's inertia (as robosuite v1.4's Sawyer head) get a shell's, as MuJoCo suggests
+            thin = re.search(r"mesh volume is too small: (\S+)", str(error))
+            if thin is None or f'name="{thin[1]}" inertia=' in model_xml:
+                raise
+            model_xml = model_xml.replace(f'name="{thin[1]}"', f'name="{thin[1]}" inertia="shell"', 1)
 
 
 def parked_joints(m, qpos) -> np.ndarray:
@@ -194,7 +239,8 @@ def _park(m, qpos):
 def _simulated(m):
     """
     Copy of `m` as MuJoCo Warp simulates it, with MuJoCo Playground's simulation settings: the `_TIMESTEP` step,
-    implicitfast integration, and no collisions of the robot arms and mounts (the grippers still collide).
+    implicitfast integration, and no collisions of the robot arms and mounts (the grippers still collide); mesh geoms
+    lose their contact margins, which MuJoCo Warp's multi-contact mesh collisions do not support.
     """
     m = deepcopy(m)
     m.opt.timestep = _TIMESTEP
@@ -202,6 +248,8 @@ def _simulated(m):
     arm = np.array([(m.body(b).name or "").startswith(("robot", "mount", "fixed_mount")) for b in m.geom_bodyid])
     m.geom_contype[arm] = 0
     m.geom_conaffinity[arm] = 0
+    # MuJoCo Warp collides meshes with multiple contacts per pair, which it supports only without contact margins
+    m.geom_margin[m.geom_type == mujoco.mjtGeom.mjGEOM_MESH] = 0.
     return m
 
 
@@ -230,11 +278,17 @@ class Pixels(NamedTuple):
     proprio: bool = False
 
 
+# model fields that MimicGen's environments vary between resets, set per world
+_FIXTURE_FIELDS = ("body_pos", "body_quat")
+
+
 class State(NamedTuple):
     data: mjx.Data
     grip: jax.Array
     q0: tuple[jax.Array, ...]
     cache: Any
+    memory: tuple[jax.Array, ...]
+    fixtures: tuple[jax.Array, ...]
 
 
 class RobomimicPOMDP:
@@ -260,8 +314,9 @@ class RobomimicPOMDP:
           proprioception under robosuite's keys;
         - "prp": the robots' proprioception, concatenated;
         - "mkv": a Markov state: the "object" vector of the current state, the proprioception, `qpos` and `qvel` of
-          everything but parked objects, each gripper's open / close state, and how far each arm's joints are from
-          the positions its controller pulls their nullspace toward;
+          everything but parked objects, each gripper's open / close state, what the task remembers of the episode,
+          the poses of the fixtures that vary between resets, and how far each arm's joints are from the positions
+          its controller pulls their nullspace toward;
         - `Pixels`: camera images, and proprioception with `Pixels.proprio`. `observe` is then unbatched or mapped
           over exactly `max_worlds` states.
 
@@ -269,7 +324,8 @@ class RobomimicPOMDP:
         - "dense": 1 on success plus the change in the task's progress in [0, 1], the closeness of each of its stages:
           reaching, holding, and carrying the objects to their goals; progress counts 1 once successful, and a step
           into a diverged simulation takes back all progress;
-        - "sparse": 1 on success, else 0, the reward of the datasets.
+        - "sparse": the reward of the datasets: 1 on success, else 0; for nut_assembly_d0 and pick_place_d0, the share
+          of objects placed.
 
         At most `max_worlds` worlds are simulated together. `contacts_per_world` is an average over the worlds.
         """
@@ -292,6 +348,10 @@ class RobomimicPOMDP:
         with np.load(_ASSETS / "resets.npz") as resets:
             self._reset_qpos = jnp.asarray(resets[f"{task}_qpos"], jnp.float32)
             self._reset_qvel = jnp.asarray(resets[f"{task}_qvel"], jnp.float32)
+            self._fixture_index = {
+                f: resets[f"{task}_model_{f}_index"] for f in _FIXTURE_FIELDS if f"{task}_model_{f}" in resets
+            }
+            self._reset_fixtures = tuple(jnp.asarray(resets[f"{task}_model_{f}"], jnp.float32) for f in self._fixture_index)
 
         self._task_name = task
         self._m = _park(m, np.asarray(self._reset_qpos[0]))
@@ -302,10 +362,14 @@ class RobomimicPOMDP:
         parked = parked_joints(self._m, np.asarray(self._reset_qpos[0]))
         self._live_qpos = np.setdiff1d(np.arange(m.nq), [m.jnt_qposadr[j] + np.arange(7) for j in parked])
         self._live_qvel = np.setdiff1d(np.arange(m.nv), [m.jnt_dofadr[j] + np.arange(6) for j in parked])
+        # geoms of bodies welded to the world, which MuJoCo Warp poses only when it makes data
+        self._static_geoms = np.flatnonzero(
+            (m.body_weldid[m.geom_bodyid] == 0) & (m.body_mocapid[m.body_rootid[m.geom_bodyid]] == -1)
+        )
         self._renderer = None
         if isinstance(observation, Pixels):
             self._renderer = CameraRenderer(
-                self._m, camera_names=observation.cameras, height=observation.height, width=observation.width,
+                simulated, camera_names=observation.cameras, height=observation.height, width=observation.width,
                 depth=False, nworld=max_worlds, graph_mode=graph_mode,
             )
         default_contacts, default_constraints = _BUFFER_SIZES[task]
@@ -321,29 +385,58 @@ class RobomimicPOMDP:
         """The model MuJoCo Warp simulates for robosuite model xml `model_xml`, or for the task's own model."""
         return _simulated(_park(load_model(self._task_name, model_xml), np.asarray(self._reset_qpos[0])))
 
-    def init_state(self, qpos, qvel, time=0.):
-        """The state at joint positions `qpos`, velocities `qvel`, and `time`, as at the start of an episode."""
+    def _fixtures(self):
+        """The model fields that vary between resets, as the simulated model sets them."""
+        return tuple(getattr(self._mx, f)[i] for f, i in self._fixture_index.items())
+
+    def _model(self, fixtures):
+        """The simulated model with the fields that vary between resets set to `fixtures`."""
+        fields = zip(self._fixture_index.items(), fixtures)
+        return self._mx.replace(**{f: getattr(self._mx, f).at[i].set(x) for (f, i), x in fields})
+
+    def _pose_static_geoms(self, model, d):
+        """`d` with the world poses of the geoms welded to the world computed from `model` and the body poses of `d`."""
+        g = self._static_geoms
+        body = self._m.geom_bodyid[g]
+        rot = d.xmat[body].reshape(-1, 3, 3)
+        geom_rot = jax.vmap(lambda q: quat2mat(wxyz_to_xyzw(q)))(model.geom_quat[g])
+        geom_xpos = d.geom_xpos.at[g].set(d.xpos[body] + jnp.einsum("gij,gj->gi", rot, model.geom_pos[g]))
+        geom_xmat = d.geom_xmat.at[g].set((rot @ geom_rot).reshape(d.geom_xmat[g].shape))
+        return d.replace(geom_xpos=geom_xpos, geom_xmat=geom_xmat)
+
+    def init_state(self, qpos, qvel, time=0., fixtures=None):
+        """
+        The state at joint positions `qpos`, velocities `qvel`, and `time`, as at the start of an episode, with the
+        model fields that vary between resets set to `fixtures`, or as the simulated model sets them.
+        """
+        fixtures = self._fixtures() if fixtures is None else fixtures
         d = mjx.make_data(
             self._m, impl="warp", naconmax=self._naconmax, naccdmax=int(self._naconmax * _CCD_SHARE), njmax=self._njmax
         )
         d = d.replace(
             qpos=jnp.asarray(qpos, jnp.float32), qvel=jnp.asarray(qvel, jnp.float32), time=jnp.asarray(time, d.time.dtype)
         )
-        d = mjx.forward(self._mx, d)
+        model = self._model(fixtures)
+        d = mjx.forward(model, self._pose_static_geoms(model, mjx.kinematics(model, d)))
         grip = jnp.zeros((len(self.arms), 2), jnp.float32)
         ctrl = d.ctrl
         for arm, g in zip(self.arms, grip):
             ctrl = ctrl.at[arm.grip_actuators].set(arm.grip_ctrl(g))
         d = d.replace(ctrl=ctrl)
         q0 = tuple(d.qpos[arm.qpos] for arm in self.arms)
-        return State(d, grip, q0, self._task.cache(d))
+        memory = self._task.remember(d, self._task.initial_memory())
+        return State(d, grip, q0, self._task.cache(d), memory, fixtures)
 
     def reset(self, key):
-        i = jax.random.randint(key, (), 0, self._reset_qpos.shape[0])
-        return self.init_state(self._reset_qpos[i], self._reset_qvel[i])
+        return self.reset_at(jax.random.randint(key, (), 0, self._reset_qpos.shape[0]))
+
+    def reset_at(self, i):
+        """The state at the start of an episode from the task's `i`-th recorded initial state."""
+        fixtures = tuple(x[i] for x in self._reset_fixtures)
+        return self.init_state(self._reset_qpos[i], self._reset_qvel[i], fixtures=fixtures)
 
     def step(self, key, state, action):
-        m = self._mx
+        m = self._model(state.fixtures)
         action = jnp.asarray(action, jnp.float32)
         d = state.data
         grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(self.arms, state.grip)])
@@ -360,7 +453,9 @@ class RobomimicPOMDP:
         d, _ = jax.lax.scan(substep, d, jnp.arange(self._n_substeps))
         # kinematics, contacts and sensors of the integrated positions and velocities
         d = mjx.forward(m, d)
-        return state._replace(data=d, grip=grip, cache=self._task.cache(state.data))
+        return state._replace(
+            data=d, grip=grip, cache=self._task.cache(state.data), memory=self._task.remember(d, state.memory),
+        )
 
     def _proprio(self, d):
         """Each robot's proprioception, concatenated."""
@@ -383,6 +478,8 @@ class RobomimicPOMDP:
             return jnp.concatenate([
                 self._task.object_obs(d, self._task.cache(d)), self._proprio(d), d.qpos[self._live_qpos],
                 d.qvel[self._live_qvel], next_state.grip.ravel(),
+                *(jnp.ravel(x).astype(jnp.float32) for x in next_state.memory),
+                *(jnp.ravel(x) for x in next_state.fixtures),
                 *(q0 - d.qpos[arm.qpos] for arm, q0 in zip(self.arms, next_state.q0)),
             ])
         obs = {"object": self._task.object_obs(d, next_state.cache)}
@@ -396,10 +493,10 @@ class RobomimicPOMDP:
         the progress of `state`, the sparse reward is 0.
         """
         if self._dense:
-            reward = self._task.dense_reward(state.data, next_state.data)
-            failed = -self._task._potential(state.data)
+            reward = self._task.dense_reward(state.data, next_state.data, state.memory, next_state.memory)
+            failed = -self._task._potential(state.data, state.memory)
         else:
-            reward = self._task.reward(next_state.data)
+            reward = self._task.reward(next_state.data, *next_state.memory)
             failed = 0.
         return jnp.where(self.diverged(state), 0., jnp.where(self.diverged(next_state), failed, reward))
 
@@ -413,7 +510,7 @@ class RobomimicPOMDP:
 
     def success(self, state):
         """Whether the task has been accomplished in `state`."""
-        return self._task.success(state.data)
+        return self._task.success(state.data, *state.memory)
 
     def overflowed(self, state):
         """Whether contact or constraint buffers overflowed while simulating `state`, dropping contacts or constraints."""
@@ -450,9 +547,9 @@ PIXELS = {
     "square": (("agentview", "robot0_eye_in_hand"), 84),
     "transport": (("shouldercamera0", "shouldercamera1", "robot0_eye_in_hand", "robot1_eye_in_hand"), 84),
     "tool_hang": (("sideview", "robot0_eye_in_hand"), 240),
-    "stack_d0": (("agentview", "robot0_eye_in_hand"), 84),
-    "coffee_d0": (("agentview", "robot0_eye_in_hand"), 84),
-    "threading_d0": (("agentview", "robot0_eye_in_hand"), 84),
+    **{task: (("agentview", "robot0_eye_in_hand"), 84) for task in _BUFFER_SIZES if task not in (
+        "lift", "can", "square", "transport", "tool_hang",
+    )},
 }
 
 

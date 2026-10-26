@@ -11,19 +11,20 @@ import argparse
 import time
 from pathlib import Path
 
-from robomimic.data.hdf5 import unpack_demos
+from robomimic.data.hdf5 import packed_names, unpack_demos
 from robomimic.data.observations import add_observations
 
 
 def main(args):
-    packed = sorted(Path(args.packed).glob("*.npz"))
+    names = packed_names(args.packed)
     if args.tasks:
-        packed = [p for p in packed if p.stem in args.tasks]
-        missing = set(args.tasks) - {p.stem for p in packed}
+        missing = set(args.tasks) - set(names)
         if missing:
             raise SystemExit(f"no packed demos for {sorted(missing)} in {args.packed}")
-    for path in packed:
-        task, dataset_type = path.stem.rsplit("_", 1)
+        names = [n for n in names if n in args.tasks]
+    for name in names:
+        path = Path(args.packed) / f"{name}.npz"
+        task, dataset_type = name.rsplit("_", 1)
         dataset = Path(args.output).expanduser() / task / dataset_type / "low_dim_v15.hdf5"
         dataset.parent.mkdir(parents=True, exist_ok=True)
         start = time.time()

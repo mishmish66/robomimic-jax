@@ -1468,5 +1468,4290 @@
     "needle_obj_handle"
    ]
   }
+ },
+ "coffee_d1": {
+  "env_name": "Coffee_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "pod": "coffee_pod_main",
+   "machine": "coffee_machine_root",
+   "holder": "coffee_machine_pod_holder_root",
+   "lid": "coffee_machine_lid_main",
+   "hinge": "coffee_machine_lid_main_joint0",
+   "pod_half_size": [
+    0.0243,
+    0.0243,
+    0.023103
+   ],
+   "holder_half_size": [
+    0.0295,
+    0.0295,
+    0.028
+   ],
+   "lid_half_height": 0.0095,
+   "lid_closed": 0.2617993877991494,
+   "pod_rest_height": 0.0077,
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "pod_geoms": [
+    "coffee_pod_g0"
+   ]
+  }
+ },
+ "coffee_d2": {
+  "env_name": "Coffee_D2",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "pod": "coffee_pod_main",
+   "machine": "coffee_machine_root",
+   "holder": "coffee_machine_pod_holder_root",
+   "lid": "coffee_machine_lid_main",
+   "hinge": "coffee_machine_lid_main_joint0",
+   "pod_half_size": [
+    0.0243,
+    0.0243,
+    0.023103
+   ],
+   "holder_half_size": [
+    0.0295,
+    0.0295,
+    0.028
+   ],
+   "lid_half_height": 0.0095,
+   "lid_closed": 0.2617993877991494,
+   "pod_rest_height": 0.0077,
+   "carry_scale": 0.45,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "pod_geoms": [
+    "coffee_pod_g0"
+   ]
+  }
+ },
+ "coffee_preparation_d0": {
+  "env_name": "CoffeePreparation_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "pod": "coffee_pod_main",
+   "machine": "coffee_machine_root",
+   "holder": "coffee_machine_pod_holder_root",
+   "lid": "coffee_machine_lid_main",
+   "hinge": "coffee_machine_lid_main_joint0",
+   "pod_half_size": [
+    0.0243,
+    0.0243,
+    0.023103
+   ],
+   "holder_half_size": [
+    0.0295,
+    0.0295,
+    0.028
+   ],
+   "lid_half_height": 0.0095,
+   "lid_closed": 0.2617993877991494,
+   "pod_rest_height": 0.0077,
+   "carry_scale": 0.35,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "pod_geoms": [
+    "coffee_pod_g0"
+   ],
+   "drawer": "CabinetObject_main",
+   "mug": "mug_main",
+   "drawer_slide": "CabinetObject_goal_slidey",
+   "drawer_handle": "CabinetObject_drawer_handle_2",
+   "base_geom": "coffee_machine_base_g0",
+   "mug_geoms": [
+    "mug_g1",
+    "mug_g2",
+    "mug_g3",
+    "mug_g4",
+    "mug_g5",
+    "mug_g6",
+    "mug_g7",
+    "mug_g8",
+    "mug_g9",
+    "mug_g10",
+    "mug_g11",
+    "mug_g12",
+    "mug_g13",
+    "mug_g14",
+    "mug_g15",
+    "mug_g16",
+    "mug_g17",
+    "mug_g18",
+    "mug_g19",
+    "mug_g20",
+    "mug_g21",
+    "mug_g22",
+    "mug_g23",
+    "mug_g24",
+    "mug_g25",
+    "mug_g26",
+    "mug_g27",
+    "mug_g28",
+    "mug_g29",
+    "mug_g30",
+    "mug_g31",
+    "mug_g32"
+   ],
+   "mug_pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision",
+     "gripper0_finger1_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision",
+     "gripper0_finger2_collision"
+    ]
+   ],
+   "mug_upright_tol": 0.001,
+   "mug_grip_offset": [
+    -0.025,
+    0.0,
+    0.015
+   ],
+   "mug_place_offset": [
+    -0.013,
+    0.018,
+    -0.1244
+   ],
+   "mug_clearance": 0.04,
+   "drawer_open": 0.19,
+   "lid_ready": 1.5,
+   "mug_carry_scale": 0.5
+  }
+ },
+ "coffee_preparation_d1": {
+  "env_name": "CoffeePreparation_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "pod": "coffee_pod_main",
+   "machine": "coffee_machine_root",
+   "holder": "coffee_machine_pod_holder_root",
+   "lid": "coffee_machine_lid_main",
+   "hinge": "coffee_machine_lid_main_joint0",
+   "pod_half_size": [
+    0.0243,
+    0.0243,
+    0.023103
+   ],
+   "holder_half_size": [
+    0.0295,
+    0.0295,
+    0.028
+   ],
+   "lid_half_height": 0.0095,
+   "lid_closed": 0.2617993877991494,
+   "pod_rest_height": 0.0077,
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "pod_geoms": [
+    "coffee_pod_g0"
+   ],
+   "drawer": "CabinetObject_main",
+   "mug": "mug_main",
+   "drawer_slide": "CabinetObject_goal_slidey",
+   "drawer_handle": "CabinetObject_drawer_handle_2",
+   "base_geom": "coffee_machine_base_g0",
+   "mug_geoms": [
+    "mug_g1",
+    "mug_g2",
+    "mug_g3",
+    "mug_g4",
+    "mug_g5",
+    "mug_g6",
+    "mug_g7",
+    "mug_g8",
+    "mug_g9",
+    "mug_g10",
+    "mug_g11",
+    "mug_g12",
+    "mug_g13",
+    "mug_g14",
+    "mug_g15",
+    "mug_g16",
+    "mug_g17",
+    "mug_g18",
+    "mug_g19",
+    "mug_g20",
+    "mug_g21",
+    "mug_g22",
+    "mug_g23",
+    "mug_g24",
+    "mug_g25",
+    "mug_g26",
+    "mug_g27",
+    "mug_g28",
+    "mug_g29",
+    "mug_g30",
+    "mug_g31",
+    "mug_g32"
+   ],
+   "mug_pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision",
+     "gripper0_finger1_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision",
+     "gripper0_finger2_collision"
+    ]
+   ],
+   "mug_upright_tol": 0.001,
+   "mug_grip_offset": [
+    -0.025,
+    0.0,
+    0.015
+   ],
+   "mug_place_offset": [
+    -0.013,
+    0.018,
+    -0.1244
+   ],
+   "mug_clearance": 0.04,
+   "drawer_open": 0.19,
+   "lid_ready": 1.5,
+   "mug_carry_scale": 0.6
+  }
+ },
+ "hammer_cleanup_d0": {
+  "env_name": "HammerCleanup_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "hammer": "hammer_root",
+   "cabinet": "CabinetObject_main",
+   "slide": "CabinetObject_goal_slidey",
+   "drawer_bottom": "CabinetObject_drawer_bottom",
+   "drawer_handle": "CabinetObject_g13",
+   "hammer_geoms": [
+    "hammer_handle",
+    "hammer_head",
+    "hammer_neck",
+    "hammer_face",
+    "hammer_claw"
+   ],
+   "drawer_closed": -0.01,
+   "drawer_opened": -0.1,
+   "drawer_ajar": -0.05,
+   "drawer_target_offset": [
+    0.0,
+    -0.03,
+    0.021
+   ],
+   "drawer_clearance": 0.07,
+   "release_height": 0.15,
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "in_drawer_z": [
+    0.94,
+    1.0
+   ],
+   "in_drawer_y": 0.22,
+   "force_sensor": "gripper0_force_ee"
+  }
+ },
+ "hammer_cleanup_d1": {
+  "env_name": "HammerCleanup_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "hammer": "hammer_root",
+   "cabinet": "CabinetObject_main",
+   "slide": "CabinetObject_goal_slidey",
+   "drawer_bottom": "CabinetObject_drawer_bottom",
+   "drawer_handle": "CabinetObject_g13",
+   "hammer_geoms": [
+    "hammer_handle",
+    "hammer_head",
+    "hammer_neck",
+    "hammer_face",
+    "hammer_claw"
+   ],
+   "drawer_closed": -0.01,
+   "drawer_opened": -0.1,
+   "drawer_ajar": -0.05,
+   "drawer_target_offset": [
+    0.0,
+    -0.03,
+    0.021
+   ],
+   "drawer_clearance": 0.07,
+   "release_height": 0.15,
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "in_drawer_z": null,
+   "in_drawer_y": null,
+   "force_sensor": "gripper0_force_ee"
+  }
+ },
+ "kitchen_d0": {
+  "env_name": "Kitchen_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "stove": "Stove1_main",
+   "bread": "cube_bread_main",
+   "pot": "PotObject_root",
+   "serving_region": "ServingRegionRed_main",
+   "button_hinge": "Button1_hinge",
+   "button_pad": "Button1_switch_pad",
+   "button_off": -0.3,
+   "button_on": 0.0,
+   "region_half_size": [
+    0.05,
+    0.1,
+    0.05
+   ],
+   "pot_geoms": [
+    "PotObject_body_0",
+    "PotObject_body_1",
+    "PotObject_body_2",
+    "PotObject_body_3",
+    "PotObject_body_4",
+    "PotObject_handle_left_1",
+    "PotObject_handle_right_1"
+   ],
+   "pot_grip_geoms": [
+    "PotObject_body_1",
+    "PotObject_body_2"
+   ],
+   "bread_geoms": [
+    "cube_bread_g0"
+   ],
+   "pot_bottom": "PotObject_body_0",
+   "burner": "Stove1_collision_burner",
+   "pot_on_stove_height": 0.025,
+   "pot_on_region_height": 0.0245,
+   "bread_in_pot_height": 0.0275,
+   "pot_inner_half_size": [
+    0.043,
+    0.053
+   ],
+   "bread_release_height": 0.15,
+   "pot_clearance": 0.04,
+   "bread_clearance": 0.1,
+   "carry_scale": 0.4,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "object_bodies": [
+    "Stove1_main",
+    "cube_bread_main",
+    "PotObject_root",
+    "ServingRegionRed_main"
+   ],
+   "stove_half_size": 0.095,
+   "pot_release_height": 0.1,
+   "force_sensor": "gripper0_force_ee"
+  }
+ },
+ "kitchen_d1": {
+  "env_name": "Kitchen_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "stove": "Stove1_main",
+   "bread": "cube_bread_main",
+   "pot": "PotObject_root",
+   "serving_region": "ServingRegionRed_main",
+   "button_hinge": "Button1_hinge",
+   "button_pad": "Button1_switch_pad",
+   "button_off": -0.3,
+   "button_on": 0.0,
+   "region_half_size": [
+    0.05,
+    0.1,
+    0.05
+   ],
+   "pot_geoms": [
+    "PotObject_body_0",
+    "PotObject_body_1",
+    "PotObject_body_2",
+    "PotObject_body_3",
+    "PotObject_body_4",
+    "PotObject_handle_left_1",
+    "PotObject_handle_right_1"
+   ],
+   "pot_grip_geoms": [
+    "PotObject_body_1",
+    "PotObject_body_2"
+   ],
+   "bread_geoms": [
+    "cube_bread_g0"
+   ],
+   "pot_bottom": "PotObject_body_0",
+   "burner": "Stove1_collision_burner",
+   "pot_on_stove_height": 0.025,
+   "pot_on_region_height": 0.0245,
+   "bread_in_pot_height": 0.0275,
+   "pot_inner_half_size": [
+    0.043,
+    0.053
+   ],
+   "bread_release_height": 0.15,
+   "pot_clearance": 0.04,
+   "bread_clearance": 0.1,
+   "carry_scale": 0.4,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "object_bodies": [
+    "Stove1_main",
+    "cube_bread_main",
+    "PotObject_root",
+    "ServingRegionRed_main",
+    "Button1_main"
+   ],
+   "stove_half_size": 0.095,
+   "pot_release_height": 0.1,
+   "force_sensor": "gripper0_force_ee"
+  }
+ },
+ "mug_cleanup_d0": {
+  "env_name": "MugCleanup_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "mug": "cleanup_object_main",
+   "drawer": "DrawerObject_main",
+   "slide": "DrawerObject_goal_slidey",
+   "bottom": "DrawerObject_drawer_bottom",
+   "handle": "DrawerObject_g13",
+   "drawer_closed": -0.01,
+   "drawer_open": -0.13,
+   "upright_tol": 0.001,
+   "release_tilt": 0.1,
+   "place_height": 0.04,
+   "clearance": 0.13,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "mug_geoms": [
+    "cleanup_object_g1",
+    "cleanup_object_g2",
+    "cleanup_object_g3",
+    "cleanup_object_g4",
+    "cleanup_object_g5",
+    "cleanup_object_g6",
+    "cleanup_object_g7",
+    "cleanup_object_g8",
+    "cleanup_object_g9",
+    "cleanup_object_g10",
+    "cleanup_object_g11",
+    "cleanup_object_g12",
+    "cleanup_object_g13",
+    "cleanup_object_g14",
+    "cleanup_object_g15",
+    "cleanup_object_g16",
+    "cleanup_object_g17",
+    "cleanup_object_g18",
+    "cleanup_object_g19",
+    "cleanup_object_g20",
+    "cleanup_object_g21",
+    "cleanup_object_g22",
+    "cleanup_object_g23",
+    "cleanup_object_g24",
+    "cleanup_object_g25",
+    "cleanup_object_g26",
+    "cleanup_object_g27",
+    "cleanup_object_g28",
+    "cleanup_object_g29",
+    "cleanup_object_g30",
+    "cleanup_object_g31",
+    "cleanup_object_g32"
+   ],
+   "carry_scale": 0.45
+  }
+ },
+ "mug_cleanup_d1": {
+  "env_name": "MugCleanup_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "mug": "cleanup_object_main",
+   "drawer": "DrawerObject_main",
+   "slide": "DrawerObject_goal_slidey",
+   "bottom": "DrawerObject_drawer_bottom",
+   "handle": "DrawerObject_g13",
+   "drawer_closed": -0.01,
+   "drawer_open": -0.13,
+   "upright_tol": 0.001,
+   "release_tilt": 0.1,
+   "place_height": 0.04,
+   "clearance": 0.13,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "mug_geoms": [
+    "cleanup_object_g1",
+    "cleanup_object_g2",
+    "cleanup_object_g3",
+    "cleanup_object_g4",
+    "cleanup_object_g5",
+    "cleanup_object_g6",
+    "cleanup_object_g7",
+    "cleanup_object_g8",
+    "cleanup_object_g9",
+    "cleanup_object_g10",
+    "cleanup_object_g11",
+    "cleanup_object_g12",
+    "cleanup_object_g13",
+    "cleanup_object_g14",
+    "cleanup_object_g15",
+    "cleanup_object_g16",
+    "cleanup_object_g17",
+    "cleanup_object_g18",
+    "cleanup_object_g19",
+    "cleanup_object_g20",
+    "cleanup_object_g21",
+    "cleanup_object_g22",
+    "cleanup_object_g23",
+    "cleanup_object_g24",
+    "cleanup_object_g25",
+    "cleanup_object_g26",
+    "cleanup_object_g27",
+    "cleanup_object_g28",
+    "cleanup_object_g29",
+    "cleanup_object_g30",
+    "cleanup_object_g31",
+    "cleanup_object_g32"
+   ],
+   "carry_scale": 0.6
+  }
+ },
+ "nut_assembly_d0": {
+  "env_name": "NutAssembly_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_l_finger_joint",
+     "gripper0_r_finger_joint"
+    ],
+    "joints": [
+     "robot0_right_j0",
+     "robot0_right_j1",
+     "robot0_right_j2",
+     "robot0_right_j3",
+     "robot0_right_j4",
+     "robot0_right_j5",
+     "robot0_right_j6"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_right_j0",
+     "robot0_torq_right_j1",
+     "robot0_torq_right_j2",
+     "robot0_torq_right_j3",
+     "robot0_torq_right_j4",
+     "robot0_torq_right_j5",
+     "robot0_torq_right_j6"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_r_finger_joint",
+     "gripper0_gripper_l_finger_joint"
+    ],
+    "grip_speed": 0.01,
+    "grip_sign": [
+     1.0,
+     -1.0
+    ],
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "bodies": [
+    "SquareNut_main",
+    "RoundNut_main"
+   ],
+   "observed": [
+    0,
+    1
+   ],
+   "single": false,
+   "reward_scale": 0.5,
+   "pegs": [
+    "peg1",
+    "peg2"
+   ],
+   "table_height": 0.82,
+   "pad_geoms": [
+    [
+     "gripper0_l_fingerpad_g0"
+    ],
+    [
+     "gripper0_r_fingerpad_g0"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "SquareNut_g0",
+     "SquareNut_g1",
+     "SquareNut_g2",
+     "SquareNut_g3",
+     "SquareNut_g4"
+    ],
+    [
+     "RoundNut_g0",
+     "RoundNut_g1",
+     "RoundNut_g2",
+     "RoundNut_g3",
+     "RoundNut_g4",
+     "RoundNut_g5",
+     "RoundNut_g6",
+     "RoundNut_g7",
+     "RoundNut_g8"
+    ]
+   ],
+   "handles": [
+    "SquareNut_handle_site",
+    "RoundNut_handle_site"
+   ],
+   "table": "table",
+   "carry_scale": 0.4,
+   "hole_half_widths": [
+    0.0227,
+    null
+   ],
+   "peg_half_widths": [
+    0.016,
+    null
+   ],
+   "observed_bodies": []
+  }
+ },
+ "pick_place_d0": {
+  "env_name": "PickPlace_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_l_finger_joint",
+     "gripper0_r_finger_joint"
+    ],
+    "joints": [
+     "robot0_right_j0",
+     "robot0_right_j1",
+     "robot0_right_j2",
+     "robot0_right_j3",
+     "robot0_right_j4",
+     "robot0_right_j5",
+     "robot0_right_j6"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_right_j0",
+     "robot0_torq_right_j1",
+     "robot0_torq_right_j2",
+     "robot0_torq_right_j3",
+     "robot0_torq_right_j4",
+     "robot0_torq_right_j5",
+     "robot0_torq_right_j6"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_r_finger_joint",
+     "gripper0_gripper_l_finger_joint"
+    ],
+    "grip_speed": 0.01,
+    "grip_sign": [
+     1.0,
+     -1.0
+    ],
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "bodies": [
+    "Milk_main",
+    "Bread_main",
+    "Cereal_main",
+    "Can_main"
+   ],
+   "observed": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "single": false,
+   "reward_scale": 0.25,
+   "bin_low": [
+    [
+     -0.095,
+     0.03500000000000003
+    ],
+    [
+     0.1,
+     0.03500000000000003
+    ],
+    [
+     -0.095,
+     0.28
+    ],
+    [
+     0.1,
+     0.28
+    ]
+   ],
+   "bin_high": [
+    [
+     0.1,
+     0.28
+    ],
+    [
+     0.29500000000000004,
+     0.28
+    ],
+    [
+     0.1,
+     0.525
+    ],
+    [
+     0.29500000000000004,
+     0.525
+    ]
+   ],
+   "bin_z": 0.8,
+   "pad_geoms": [
+    [
+     "gripper0_l_fingerpad_g0"
+    ],
+    [
+     "gripper0_r_fingerpad_g0"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "Milk_g0"
+    ],
+    [
+     "Bread_g0"
+    ],
+    [
+     "Cereal_g0"
+    ],
+    [
+     "Can_g0"
+    ]
+   ],
+   "bin_centers": [
+    [
+     0.0025000000000000022,
+     0.15750000000000003
+    ],
+    [
+     0.1975,
+     0.15750000000000003
+    ],
+    [
+     0.0025000000000000022,
+     0.4025
+    ],
+    [
+     0.1975,
+     0.4025
+    ]
+   ],
+   "bin_size": [
+    0.39,
+    0.49
+   ],
+   "carry_scale": 0.85,
+   "place_heights": [
+    0.885,
+    0.845,
+    0.9,
+    0.86
+   ]
+  }
+ },
+ "square_d0": {
+  "env_name": "Square_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "bodies": [
+    "SquareNut_main",
+    "RoundNut_main"
+   ],
+   "observed": [
+    0
+   ],
+   "single": true,
+   "reward_scale": 1.0,
+   "pegs": [
+    "peg1",
+    "peg2"
+   ],
+   "table_height": 0.82,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "SquareNut_g0",
+     "SquareNut_g1",
+     "SquareNut_g2",
+     "SquareNut_g3",
+     "SquareNut_g4"
+    ],
+    [
+     "RoundNut_g0",
+     "RoundNut_g1",
+     "RoundNut_g2",
+     "RoundNut_g3",
+     "RoundNut_g4",
+     "RoundNut_g5",
+     "RoundNut_g6",
+     "RoundNut_g7",
+     "RoundNut_g8"
+    ]
+   ],
+   "handles": [
+    "SquareNut_handle_site",
+    "RoundNut_handle_site"
+   ],
+   "table": "table",
+   "carry_scale": 0.4,
+   "hole_half_widths": [
+    0.0227,
+    null
+   ],
+   "peg_half_widths": [
+    0.016,
+    null
+   ],
+   "observed_bodies": []
+  }
+ },
+ "square_d1": {
+  "env_name": "Square_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "bodies": [
+    "SquareNut_main",
+    "RoundNut_main"
+   ],
+   "observed": [
+    0
+   ],
+   "single": true,
+   "reward_scale": 1.0,
+   "pegs": [
+    "peg1",
+    "peg2"
+   ],
+   "table_height": 0.82,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "SquareNut_g0",
+     "SquareNut_g1",
+     "SquareNut_g2",
+     "SquareNut_g3",
+     "SquareNut_g4"
+    ],
+    [
+     "RoundNut_g0",
+     "RoundNut_g1",
+     "RoundNut_g2",
+     "RoundNut_g3",
+     "RoundNut_g4",
+     "RoundNut_g5",
+     "RoundNut_g6",
+     "RoundNut_g7",
+     "RoundNut_g8"
+    ]
+   ],
+   "handles": [
+    "SquareNut_handle_site",
+    "RoundNut_handle_site"
+   ],
+   "table": "table",
+   "carry_scale": 0.65,
+   "hole_half_widths": [
+    0.0227,
+    null
+   ],
+   "peg_half_widths": [
+    0.016,
+    null
+   ],
+   "observed_bodies": [
+    "peg1"
+   ]
+  }
+ },
+ "square_d2": {
+  "env_name": "Square_D2",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "bodies": [
+    "SquareNut_main",
+    "RoundNut_main"
+   ],
+   "observed": [
+    0
+   ],
+   "single": true,
+   "reward_scale": 1.0,
+   "pegs": [
+    "peg1",
+    "peg2"
+   ],
+   "table_height": 0.82,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "object_geoms": [
+    [
+     "SquareNut_g0",
+     "SquareNut_g1",
+     "SquareNut_g2",
+     "SquareNut_g3",
+     "SquareNut_g4"
+    ],
+    [
+     "RoundNut_g0",
+     "RoundNut_g1",
+     "RoundNut_g2",
+     "RoundNut_g3",
+     "RoundNut_g4",
+     "RoundNut_g5",
+     "RoundNut_g6",
+     "RoundNut_g7",
+     "RoundNut_g8"
+    ]
+   ],
+   "handles": [
+    "SquareNut_handle_site",
+    "RoundNut_handle_site"
+   ],
+   "table": "table",
+   "carry_scale": 0.75,
+   "hole_half_widths": [
+    0.0227,
+    null
+   ],
+   "peg_half_widths": [
+    0.016,
+    null
+   ],
+   "observed_bodies": [
+    "peg1"
+   ]
+  }
+ },
+ "stack_d1": {
+  "env_name": "Stack_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "cube_a": "cubeA_main",
+   "cube_b": "cubeB_main",
+   "table_height": 0.8,
+   "cube_half_sizes": [
+    0.02,
+    0.025
+   ],
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "cube_a_geoms": [
+    "cubeA_g0"
+   ],
+   "cube_b_geoms": [
+    "cubeB_g0"
+   ]
+  }
+ },
+ "stack_three_d0": {
+  "env_name": "StackThree_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "cube_a": "cubeA_main",
+   "cube_b": "cubeB_main",
+   "cube_c": "cubeC_main",
+   "table_height": 0.8,
+   "cube_half_sizes": [
+    0.02,
+    0.025,
+    0.02
+   ],
+   "lift_margins": [
+    0.04,
+    0.08
+   ],
+   "carry_scale": 0.25,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "cube_a_geoms": [
+    "cubeA_g0"
+   ],
+   "cube_b_geoms": [
+    "cubeB_g0"
+   ],
+   "cube_c_geoms": [
+    "cubeC_g0"
+   ]
+  }
+ },
+ "stack_three_d1": {
+  "env_name": "StackThree_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "cube_a": "cubeA_main",
+   "cube_b": "cubeB_main",
+   "cube_c": "cubeC_main",
+   "table_height": 0.8,
+   "cube_half_sizes": [
+    0.02,
+    0.025,
+    0.02
+   ],
+   "lift_margins": [
+    0.04,
+    0.08
+   ],
+   "carry_scale": 0.5,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "cube_a_geoms": [
+    "cubeA_g0"
+   ],
+   "cube_b_geoms": [
+    "cubeB_g0"
+   ],
+   "cube_c_geoms": [
+    "cubeC_g0"
+   ]
+  }
+ },
+ "threading_d1": {
+  "env_name": "Threading_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "needle": "needle_obj_root",
+   "tripod": "tripod_obj_root",
+   "bar": "needle_obj_needle",
+   "handle": "needle_obj_handle",
+   "ring_geoms": [
+    "tripod_obj_ring_0",
+    "tripod_obj_ring_1",
+    "tripod_obj_ring_2",
+    "tripod_obj_ring_3",
+    "tripod_obj_ring_4",
+    "tripod_obj_ring_5",
+    "tripod_obj_ring_6",
+    "tripod_obj_ring_7",
+    "tripod_obj_ring_8",
+    "tripod_obj_ring_9",
+    "tripod_obj_ring_10",
+    "tripod_obj_ring_11",
+    "tripod_obj_ring_12",
+    "tripod_obj_ring_13",
+    "tripod_obj_ring_14",
+    "tripod_obj_ring_15",
+    "tripod_obj_ring_16",
+    "tripod_obj_ring_17",
+    "tripod_obj_ring_18",
+    "tripod_obj_ring_19"
+   ],
+   "ring_radius": 0.012,
+   "carry_scale": 0.6,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "needle_geoms": [
+    "needle_obj_needle",
+    "needle_obj_handle"
+   ]
+  }
+ },
+ "threading_d2": {
+  "env_name": "Threading_D2",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "needle": "needle_obj_root",
+   "tripod": "tripod_obj_root",
+   "bar": "needle_obj_needle",
+   "handle": "needle_obj_handle",
+   "ring_geoms": [
+    "tripod_obj_ring_0",
+    "tripod_obj_ring_1",
+    "tripod_obj_ring_2",
+    "tripod_obj_ring_3",
+    "tripod_obj_ring_4",
+    "tripod_obj_ring_5",
+    "tripod_obj_ring_6",
+    "tripod_obj_ring_7",
+    "tripod_obj_ring_8",
+    "tripod_obj_ring_9",
+    "tripod_obj_ring_10",
+    "tripod_obj_ring_11",
+    "tripod_obj_ring_12",
+    "tripod_obj_ring_13",
+    "tripod_obj_ring_14",
+    "tripod_obj_ring_15",
+    "tripod_obj_ring_16",
+    "tripod_obj_ring_17",
+    "tripod_obj_ring_18",
+    "tripod_obj_ring_19"
+   ],
+   "ring_radius": 0.012,
+   "carry_scale": 0.6,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "needle_geoms": [
+    "needle_obj_needle",
+    "needle_obj_handle"
+   ]
+  }
+ },
+ "three_piece_assembly_d0": {
+  "env_name": "ThreePieceAssembly_D0",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "base": "base_root",
+   "piece_1": "piece_1_root",
+   "piece_2": "piece_2_root",
+   "piece_1_grip": "piece_1_2_1_1",
+   "piece_2_grip": "piece_2_3_1_1",
+   "xy_thresh": 0.02,
+   "z_thresh": 0.02,
+   "piece_2_height": 0.08,
+   "piece_1_rest_height": 0.032,
+   "piece_2_rest_height": 0.099,
+   "piece_1_clearance": 0.09,
+   "piece_2_clearance": 0.183,
+   "hole_half_width": 0.057,
+   "slab_half_width": 0.051,
+   "slot_half_width": 0.02,
+   "ridge_half_size": [
+    0.017,
+    0.051
+   ],
+   "seat_slack": 0.01,
+   "carry_scale": 0.35,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "piece_1_geoms": [
+    "piece_1_0_0_0",
+    "piece_1_0_0_1",
+    "piece_1_0_0_2",
+    "piece_1_0_1_0",
+    "piece_1_0_1_1",
+    "piece_1_0_1_2",
+    "piece_1_0_2_0",
+    "piece_1_0_2_1",
+    "piece_1_0_2_2",
+    "piece_1_1_1_0",
+    "piece_1_1_1_1",
+    "piece_1_1_1_2",
+    "piece_1_2_1_0",
+    "piece_1_2_1_1",
+    "piece_1_2_1_2"
+   ],
+   "piece_2_geoms": [
+    "piece_2_0_0_0",
+    "piece_2_0_0_1",
+    "piece_2_0_0_2",
+    "piece_2_0_2_0",
+    "piece_2_0_2_1",
+    "piece_2_0_2_2",
+    "piece_2_1_0_0",
+    "piece_2_1_0_1",
+    "piece_2_1_0_2",
+    "piece_2_1_2_0",
+    "piece_2_1_2_1",
+    "piece_2_1_2_2",
+    "piece_2_2_0_0",
+    "piece_2_2_0_1",
+    "piece_2_2_0_2",
+    "piece_2_2_1_0",
+    "piece_2_2_1_1",
+    "piece_2_2_1_2",
+    "piece_2_2_2_0",
+    "piece_2_2_2_1",
+    "piece_2_2_2_2",
+    "piece_2_3_1_1"
+   ],
+   "release_height": 0.05,
+   "goal_tolerance": 0.01,
+   "release_radius": 0.03
+  }
+ },
+ "three_piece_assembly_d1": {
+  "env_name": "ThreePieceAssembly_D1",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "base": "base_root",
+   "piece_1": "piece_1_root",
+   "piece_2": "piece_2_root",
+   "piece_1_grip": "piece_1_2_1_1",
+   "piece_2_grip": "piece_2_3_1_1",
+   "xy_thresh": 0.02,
+   "z_thresh": 0.02,
+   "piece_2_height": 0.08,
+   "piece_1_rest_height": 0.032,
+   "piece_2_rest_height": 0.099,
+   "piece_1_clearance": 0.09,
+   "piece_2_clearance": 0.183,
+   "hole_half_width": 0.057,
+   "slab_half_width": 0.051,
+   "slot_half_width": 0.02,
+   "ridge_half_size": [
+    0.017,
+    0.051
+   ],
+   "seat_slack": 0.01,
+   "carry_scale": 0.6,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "piece_1_geoms": [
+    "piece_1_0_0_0",
+    "piece_1_0_0_1",
+    "piece_1_0_0_2",
+    "piece_1_0_1_0",
+    "piece_1_0_1_1",
+    "piece_1_0_1_2",
+    "piece_1_0_2_0",
+    "piece_1_0_2_1",
+    "piece_1_0_2_2",
+    "piece_1_1_1_0",
+    "piece_1_1_1_1",
+    "piece_1_1_1_2",
+    "piece_1_2_1_0",
+    "piece_1_2_1_1",
+    "piece_1_2_1_2"
+   ],
+   "piece_2_geoms": [
+    "piece_2_0_0_0",
+    "piece_2_0_0_1",
+    "piece_2_0_0_2",
+    "piece_2_0_2_0",
+    "piece_2_0_2_1",
+    "piece_2_0_2_2",
+    "piece_2_1_0_0",
+    "piece_2_1_0_1",
+    "piece_2_1_0_2",
+    "piece_2_1_2_0",
+    "piece_2_1_2_1",
+    "piece_2_1_2_2",
+    "piece_2_2_0_0",
+    "piece_2_2_0_1",
+    "piece_2_2_0_2",
+    "piece_2_2_1_0",
+    "piece_2_2_1_1",
+    "piece_2_2_1_2",
+    "piece_2_2_2_0",
+    "piece_2_2_2_1",
+    "piece_2_2_2_2",
+    "piece_2_3_1_1"
+   ],
+   "release_height": 0.05,
+   "goal_tolerance": 0.01,
+   "release_radius": 0.03
+  }
+ },
+ "three_piece_assembly_d2": {
+  "env_name": "ThreePieceAssembly_D2",
+  "action_dim": 7,
+  "n_substeps": 25,
+  "robosuite": "1.4.1",
+  "arms": [
+   {
+    "arm_action": [
+     0,
+     6
+    ],
+    "grip_action": [
+     6,
+     7
+    ],
+    "arm_scale": {
+     "input_min": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -0.05,
+      -0.05,
+      -0.05,
+      -0.5,
+      -0.5,
+      -0.5
+     ],
+     "output_max": [
+      0.05,
+      0.05,
+      0.05,
+      0.5,
+      0.5,
+      0.5
+     ]
+    },
+    "grip_scale": {
+     "input_min": [
+      -1.0,
+      -1.0
+     ],
+     "input_max": [
+      1.0,
+      1.0
+     ],
+     "output_min": [
+      -1.0,
+      -1.0
+     ],
+     "output_max": [
+      1.0,
+      1.0
+     ]
+    },
+    "site": "gripper0_grip_site",
+    "prefix": "robot0_",
+    "body": "robot0_right_hand",
+    "grip_joints": [
+     "gripper0_finger_joint1",
+     "gripper0_finger_joint2"
+    ],
+    "joints": [
+     "robot0_joint1",
+     "robot0_joint2",
+     "robot0_joint3",
+     "robot0_joint4",
+     "robot0_joint5",
+     "robot0_joint6",
+     "robot0_joint7"
+    ],
+    "kp": [
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0,
+     150.0
+    ],
+    "kd": [
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178,
+     24.49489742783178
+    ],
+    "actuators": [
+     "robot0_torq_j1",
+     "robot0_torq_j2",
+     "robot0_torq_j3",
+     "robot0_torq_j4",
+     "robot0_torq_j5",
+     "robot0_torq_j6",
+     "robot0_torq_j7"
+    ],
+    "grip_actuators": [
+     "gripper0_gripper_finger_joint1",
+     "gripper0_gripper_finger_joint2"
+    ],
+    "grip_speed": 0.01,
+    "proprio": [
+     "joint_pos",
+     "joint_pos_cos",
+     "joint_pos_sin",
+     "joint_vel",
+     "eef_pos",
+     "eef_quat",
+     "eef_vel_lin",
+     "eef_vel_ang",
+     "gripper_qpos",
+     "gripper_qvel"
+    ],
+    "grip_substeps": 25
+   }
+  ],
+  "task": {
+   "base": "base_root",
+   "piece_1": "piece_1_root",
+   "piece_2": "piece_2_root",
+   "piece_1_grip": "piece_1_2_1_1",
+   "piece_2_grip": "piece_2_3_1_1",
+   "xy_thresh": 0.02,
+   "z_thresh": 0.02,
+   "piece_2_height": 0.08,
+   "piece_1_rest_height": 0.032,
+   "piece_2_rest_height": 0.099,
+   "piece_1_clearance": 0.09,
+   "piece_2_clearance": 0.183,
+   "hole_half_width": 0.057,
+   "slab_half_width": 0.051,
+   "slot_half_width": 0.02,
+   "ridge_half_size": [
+    0.017,
+    0.051
+   ],
+   "seat_slack": 0.01,
+   "carry_scale": 0.6,
+   "pad_geoms": [
+    [
+     "gripper0_finger1_pad_collision"
+    ],
+    [
+     "gripper0_finger2_pad_collision"
+    ]
+   ],
+   "piece_1_geoms": [
+    "piece_1_0_0_0",
+    "piece_1_0_0_1",
+    "piece_1_0_0_2",
+    "piece_1_0_1_0",
+    "piece_1_0_1_1",
+    "piece_1_0_1_2",
+    "piece_1_0_2_0",
+    "piece_1_0_2_1",
+    "piece_1_0_2_2",
+    "piece_1_1_1_0",
+    "piece_1_1_1_1",
+    "piece_1_1_1_2",
+    "piece_1_2_1_0",
+    "piece_1_2_1_1",
+    "piece_1_2_1_2"
+   ],
+   "piece_2_geoms": [
+    "piece_2_0_0_0",
+    "piece_2_0_0_1",
+    "piece_2_0_0_2",
+    "piece_2_0_2_0",
+    "piece_2_0_2_1",
+    "piece_2_0_2_2",
+    "piece_2_1_0_0",
+    "piece_2_1_0_1",
+    "piece_2_1_0_2",
+    "piece_2_1_2_0",
+    "piece_2_1_2_1",
+    "piece_2_1_2_2",
+    "piece_2_2_0_0",
+    "piece_2_2_0_1",
+    "piece_2_2_0_2",
+    "piece_2_2_1_0",
+    "piece_2_2_1_1",
+    "piece_2_2_1_2",
+    "piece_2_2_2_0",
+    "piece_2_2_2_1",
+    "piece_2_2_2_2",
+    "piece_2_3_1_1"
+   ],
+   "release_height": 0.05,
+   "goal_tolerance": 0.01,
+   "release_radius": 0.03
+  }
  }
 }

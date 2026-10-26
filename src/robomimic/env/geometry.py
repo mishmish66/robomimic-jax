@@ -104,20 +104,40 @@ def _scaled(unit, scale):
     return vert.astype(np.float32) * scale, face.astype(np.float32) * scale, face_normal, edge, edge_face_normal
 
 
-def _convex_shape(m, g):
-    """`ConvexInfo` of geom `g`, without a pose."""
+def _grown_mesh(mesh, grow):
+    """
+    Vertices and face vertices of the MJX convex `mesh` with each of its face planes moved out by `grow`: each vertex
+    moves along the mean normal of its faces, far enough that every one of those faces moves `grow`.
+    """
+    vert, face = np.asarray(mesh.vert, np.float64), np.asarray(mesh.face, np.float64)
+    normal = np.asarray(mesh.face_normal, np.float64)
+    if grow == 0.:
+        return vert.astype(np.float32), face.astype(np.float32)
+    shift = np.zeros_like(vert)
+    for i, v in enumerate(vert):
+        normals = normal[np.any(np.all(np.isclose(face, v, atol=1e-7), axis=-1), axis=-1)]
+        mean = normals.mean(axis=0)
+        mean /= np.linalg.norm(mean)
+        shift[i] = grow * mean / np.min(normals @ mean)
+    match = np.all(np.isclose(face[:, :, None], vert[None, None], atol=1e-7), axis=-1)
+    return (vert + shift).astype(np.float32), (face + shift[np.argmax(match, axis=-1)]).astype(np.float32)
+
+
+def _convex_shape(m, g, grow=0.):
+    """`ConvexInfo` of geom `g`, without a pose, grown by `grow` on every side, in numpy arrays that any trace can use."""
     size = m.geom_size[g].astype(np.float32)
     match mujoco.mjtGeom(m.geom_type[g]):
         case mujoco.mjtGeom.mjGEOM_MESH:
             mesh = mjx_mesh.convex(m, m.geom_dataid[g])
-            arrays = mesh.vert, mesh.face, mesh.face_normal, mesh.edge, mesh.edge_face_normal
+            vert, face = _grown_mesh(mesh, grow)
+            arrays = vert, face, mesh.face_normal, mesh.edge, mesh.edge_face_normal
         case mujoco.mjtGeom.mjGEOM_BOX:
-            arrays = _scaled(_UNIT_BOX, size)
+            arrays = _scaled(_UNIT_BOX, size + grow)
         case mujoco.mjtGeom.mjGEOM_CYLINDER:
-            arrays = _scaled(_UNIT_PRISM, size[[0, 0, 1]])
+            arrays = _scaled(_UNIT_PRISM, size[[0, 0, 1]] + grow)
         case t:
             raise NotImplementedError(f"contact tests for geom type {t.name}")
-    return ConvexInfo(None, None, jnp.asarray(size), *(jnp.asarray(x) for x in arrays))
+    return ConvexInfo(None, None, np.asarray(size), *(np.asarray(x) for x in arrays))
 
 
 class ContactTest:
@@ -133,16 +153,30 @@ class ContactTest:
         ]
         if not self._pairs:
             raise ValueError("no collidable geom pairs")
-        self._shapes = {g: _convex_shape(m, g) for pair in self._pairs for g in pair}
-        self._boxes = {g for g in self._shapes if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX}
+        self._m = m
+        self._boxes = {g for pair in self._pairs for g in pair if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX}
         self._margin = np.asarray(m.geom_margin)
+        self._shapes = {}
+
+    def _shape(self, g, grow):
+        """The shape of geom `g` grown by `grow`, as JAX arrays of the current trace."""
+        if (g, grow) not in self._shapes:
+            with jax.ensure_compile_time_eval():
+                self._shapes[g, grow] = _convex_shape(self._m, g, grow)
+        return jax.tree.map(jnp.asarray, self._shapes[g, grow])
 
     def __call__(self, d, slack=0.):
-        """Whether the two geom groups are in contact, or within `slack` of it, in world data `d`."""
+        """
+        Whether the two geom groups are in contact, as MuJoCo counts it (within the larger of the two geoms' margins),
+        or within a further `slack` of it, in world data `d`.
+        """
         touching = []
         for a, b in self._pairs:
-            ia, ib = (self._shapes[g].replace(pos=d.geom_xpos[g], mat=d.geom_xmat[g].reshape(3, 3)) for g in (a, b))
+            # the convex collision functions report only penetration, so the first geom grows by the allowed gap
+            grow = float(max(self._margin[a], self._margin[b]) + slack)
+            ia = self._shape(a, grow).replace(pos=d.geom_xpos[a], mat=d.geom_xmat[a].reshape(3, 3))
+            ib = self._shape(b, 0.).replace(pos=d.geom_xpos[b], mat=d.geom_xmat[b].reshape(3, 3))
             collide = collision_convex._box_box if {a, b} <= self._boxes else collision_convex._convex_convex
             dist, _, _ = collide(ia, ib)
-            touching.append(jnp.min(dist) < max(self._margin[a], self._margin[b]) + slack)
+            touching.append(jnp.min(dist) < 0.)
         return jnp.any(jnp.stack(touching))

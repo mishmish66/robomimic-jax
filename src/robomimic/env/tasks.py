@@ -247,13 +247,25 @@ class _Grasp:
 
 
 class Task:
-    """Base class; tasks without cached sensors return an empty cache."""
+    """
+    Base class; tasks without cached sensors return an empty cache, and tasks that remember nothing of an episode
+    beyond its current world have an empty memory. The success, reward and progress of a task with a memory take it
+    after the world, unpacked.
+    """
     def cache(self, d):
         return ()
 
-    def shaped_reward(self, d):
+    def initial_memory(self):
+        """The memory at the start of an episode."""
+        return ()
+
+    def remember(self, d, memory):
+        """`memory` updated with world `d`."""
+        return memory
+
+    def shaped_reward(self, d, *memory):
         """robosuite's shaped reward; robosuite has none for this task, so the sparse reward."""
-        return self.reward(d)
+        return self.reward(d, *memory)
 
     def extra_obs(self, d):
         """Low-dim observations of the task beyond "object" and the robots' proprioception."""
@@ -263,13 +275,14 @@ class Task:
         """Progress toward success in [0, 1]."""
         raise NotImplementedError
 
-    def _potential(self, d):
+    def _potential(self, d, memory=()):
         """Progress, counting 1 once successful."""
-        return jnp.where(self.success(d), 1., self.progress(d))
+        return jnp.where(self.success(d, *memory), 1., self.progress(d, *memory))
 
-    def dense_reward(self, d, d_next):
+    def dense_reward(self, d, d_next, memory=(), memory_next=()):
         """1 on success after a step from world `d` to `d_next`, plus the change in progress."""
-        return self.success(d_next).astype(jnp.float32) + self._potential(d_next) - self._potential(d)
+        success = self.success(d_next, *memory_next).astype(jnp.float32)
+        return success + self._potential(d_next, memory_next) - self._potential(d, memory)
 
 
 class Lift(Task):
@@ -883,16 +896,81 @@ class Stack(Task):
         return jnp.maximum(jnp.maximum(reach, lift), stack) / 2.
 
     def progress(self, d):
-        """Reaching cube A, holding it, lifting it over cube B and lowering it onto B; held once released resting on B."""
-        pa, pb = d.xpos[self.cube_a], d.xpos[self.cube_b]
-        held = self.grasp.held(d)
-        place = pb[2] + self.half_b + self.half_a
-        offset = jnp.linalg.norm(pa[:2] - pb[:2])
-        released = ~held & self.touching(d) & (offset < self.half_b) & self._lifted(d)
-        reach = jnp.where(released, 1., _reach(self.arm, d, pa))
-        grip = _grip(self.arm, self.grasp, d, held | released, pa)
-        carry = _lift_and_carry(pa[2], offset, place, place + 2. * self.half_a, self.carry_scale)
-        return _progress(reach, grip, held | released, *carry)
+        """
+        Reaching cube A, holding it, lifting it over cube B and lowering it onto B; held once released over B, resting
+        on it or dropping onto it from within a cube's height.
+        """
+        progress, _ = _stack_progress(
+            self.arm, self.grasp, d, self.cube_a, self.cube_b, self.half_a, self.half_b, self.touching(d), self._lifted(d),
+            self.carry_scale,
+        )
+        return progress
+
+
+def _stack_progress(arm, grasp, d, cube, base, half, half_base, touching, lifted, carry_scale):
+    """
+    Progress of stacking `cube` (half size `half`, grasped by `grasp`) on `base` (half size `half_base`): reaching it,
+    holding it, lifting it over `base` and lowering it on top, held once released over `base`, `touching` it or
+    dropping onto it from within a cube's height, while `lifted`. Also returns whether it is so released.
+    """
+    p, p_base = d.xpos[cube], d.xpos[base]
+    held = grasp.held(d)
+    place = p_base[2] + half_base + half
+    offset = jnp.linalg.norm(p[:2] - p_base[:2])
+    dropping = (p[2] > place) & (p[2] < place + 2. * half)
+    released = ~held & (touching | dropping) & (offset < half_base) & lifted
+    reach = jnp.where(released, 1., _reach(arm, d, p))
+    grip = _grip(arm, grasp, d, held | released, p)
+    carry = _lift_and_carry(p[2], offset, place, place + 2. * half, carry_scale)
+    return _progress(reach, grip, held | released, *carry), released
+
+
+class StackThree(Task):
+    """MimicGen's StackThree: cube A stacked on cube B, then cube C on cube A, both let go."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.cube_a, self.cube_b, self.cube_c = (m.body(spec[k]).id for k in ("cube_a", "cube_b", "cube_c"))
+        self.table_height = spec["table_height"]
+        self.half_a, self.half_b, self.half_c = spec["cube_half_sizes"]
+        self.lift_a, self.lift_c = spec["lift_margins"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp_a = _Grasp(m, spec["pad_geoms"], [spec["cube_a_geoms"]])
+        self.grasp_c = _Grasp(m, spec["pad_geoms"], [spec["cube_c_geoms"]])
+        a, b, c = (_ids(m.geom, spec[k]) for k in ("cube_a_geoms", "cube_b_geoms", "cube_c_geoms"))
+        self.a_on_b = ContactTest(m, a, b)
+        self.c_on_a = ContactTest(m, c, a)
+
+    def object_obs(self, d, cache):
+        """Stack's 23 entries, then cube C's pose, its position relative to the gripper and to A, and B's relative to C."""
+        (pa, qa), (pb, qb), (pc, qc) = (_body_pose_xyzw(d, body) for body in (self.cube_a, self.cube_b, self.cube_c))
+        eef = self.arm.eef_pos(d)
+        return jnp.concatenate([pa, qa, pb, qb, pa - eef, pb - eef, pb - pa, pc, qc, pc - eef, pc - pa, pb - pc])
+
+    def _a_lifted(self, d):
+        return d.xpos[self.cube_a, 2] > self.table_height + self.lift_a
+
+    def _c_lifted(self, d):
+        return d.xpos[self.cube_c, 2] > self.table_height + self.lift_c
+
+    def success(self, d):
+        a_stacked = ~self.grasp_a(d) & self._a_lifted(d) & self.a_on_b(d)
+        c_stacked = ~self.grasp_c(d) & self._c_lifted(d) & self.c_on_a(d)
+        return a_stacked & c_stacked
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def progress(self, d):
+        """Half for stacking cube A on cube B; half for stacking cube C on cube A, once A is released on B."""
+        a, a_done = _stack_progress(
+            self.arm, self.grasp_a, d, self.cube_a, self.cube_b, self.half_a, self.half_b, self.a_on_b(d),
+            self._a_lifted(d), self.carry_scale,
+        )
+        c, _ = _stack_progress(
+            self.arm, self.grasp_c, d, self.cube_c, self.cube_a, self.half_c, self.half_a, self.c_on_a(d),
+            self._c_lifted(d), self.carry_scale,
+        )
+        return 0.5 * a + 0.5 * jnp.where(a_done, c, 0.)
 
 
 class Threading(Task):
@@ -988,6 +1066,543 @@ class Coffee(Task):
         return 0.5 * pod_progress + 0.5 * jnp.where(released, closed, 0.)
 
 
+# height above its resting height within which a mug let go over the drawer's bottom counts as released into it
+_MUG_DROP = 0.03
+
+
+class MugCleanup(Task):
+    """MimicGen's MugCleanup: the drawer opened, the mug put upright into it, and the drawer closed."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.mug, self.drawer = m.body(spec["mug"]).id, m.body(spec["drawer"]).id
+        self.slide = int(m.jnt_qposadr[m.joint(spec["slide"]).id])
+        self.bottom, self.handle = m.geom(spec["bottom"]).id, m.geom(spec["handle"]).id
+        self.closed, self.opened = spec["drawer_closed"], spec["drawer_open"]
+        self.upright_tol, self.release_tilt = spec["upright_tol"], spec["release_tilt"]
+        self.place_height, self.clearance = spec["place_height"], spec["clearance"]
+        self.carry_scale = spec["carry_scale"]
+        self.bottom_half = m.geom_size[self.bottom, :2].copy()
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["mug_geoms"]])
+        self.on_bottom = ContactTest(m, [self.bottom], _ids(m.geom, spec["mug_geoms"]))
+
+    def object_obs(self, d, cache):
+        """The mug's and the drawer's poses and poses relative to the gripper, then the drawer's slide position."""
+        return jnp.concatenate([
+            *_pose_to_gripper(self.arm, d, self.mug), *_pose_to_gripper(self.arm, d, self.drawer), d.qpos[self.slide][None],
+        ])
+
+    def _upright(self, d, tol):
+        return d.xmat[self.mug].reshape(3, 3)[2, 2] > 1. - tol
+
+    def _over_bottom(self, d):
+        """Whether the mug stands within `release_tilt` of upright over the drawer's bottom, at most `_MUG_DROP` above resting."""
+        rel = d.geom_xmat[self.bottom].reshape(3, 3).T @ (d.xpos[self.mug] - d.geom_xpos[self.bottom])
+        return self._upright(d, self.release_tilt) & jnp.all(jnp.abs(rel[:2]) < self.bottom_half) & (rel[2] < self.place_height + _MUG_DROP)
+
+    def success(self, d):
+        return (d.qpos[self.slide] > self.closed) & self._upright(d, self.upright_tol) & self.on_bottom(d)
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def _handle_stage(self, d, done):
+        """Closeness of the gripper to the drawer's handle, superseded by `done` in [0, 1]."""
+        reach = _closing(jnp.linalg.norm(self.arm.eef_pos(d) - d.geom_xpos[self.handle]), _REACH_SCALE)
+        return 0.3 * jnp.maximum(reach, done) + 0.7 * done
+
+    def progress(self, d):
+        """
+        A quarter for pulling the drawer open by its handle; half for the mug, reaching it, holding it, lifting it over
+        the open drawer and lowering it onto the drawer's bottom, held once released upright over the bottom; a quarter
+        for pushing the drawer closed, once the mug is in it.
+        """
+        q = d.qpos[self.slide]
+        mug, bottom = d.xpos[self.mug], d.geom_xpos[self.bottom]
+        held = self.grasp.held(d)
+        released = ~held & self._over_bottom(d)
+        opened = _ramp(jnp.maximum(q - self.opened, 0.), -self.opened)
+        closed = _ramp(jnp.maximum(self.closed - q, 0.), self.closed - self.opened)
+        offset = jnp.linalg.norm(mug[:2] - bottom[:2])
+        reach = jnp.where(released, 1., _reach(self.arm, d, mug))
+        grip = _grip(self.arm, self.grasp, d, held | released, mug)
+        carry = _lift_and_carry(mug[2], offset, bottom[2] + self.place_height, bottom[2] + self.clearance, self.carry_scale)
+        mug_progress = _progress(reach, grip, (held | released) * jnp.where(released, 1., opened), *carry)
+        open_progress = jnp.where(released, 1., self._handle_stage(d, opened))
+        close_progress = jnp.where(released, self._handle_stage(d, closed), 0.)
+        return 0.25 * open_progress + 0.5 * mug_progress + 0.25 * close_progress
+
+
+class _MimicGenPlacement:
+    """
+    robosuite 1.4.1's placement observations: per observed object its current position, quaternion, and pose relative
+    to the gripper, then the positions of `observed_bodies`. Without `single`, progress covers every object.
+    """
+    def __init__(self, spec, m, arms):
+        super().__init__(spec, m, arms)
+        self.observed_bodies = _ids(m.body, spec.get("observed_bodies", []))
+
+    def cache(self, d):
+        return ()
+
+    def object_obs(self, d, cache):
+        parts = [part for i in self.observed for part in _pose_to_gripper(self.arm, d, self.bodies[i])]
+        return jnp.concatenate(parts + [d.xpos[b] for b in self.observed_bodies])
+
+    def _object_progress(self, d, i):
+        """
+        Progress of object `i` without the gripper's uprightness, and whether it is released over its target: as
+        `_PlacementTask.progress`.
+        """
+        pos = d.xpos[self.bodies[i]]
+        mask = np.arange(len(self.bodies)) == i
+        grasped = self.grasp.held(d, mask)
+        offset = self._target_offset(d, i)
+        carry = self._carry(d, i, pos, offset)
+        released = self._released(d, i, pos, offset, grasped)
+        target = self._reach_targets(d)[i]
+        reach = jnp.where(released, 1., _reach(self.arm, d, target))
+        grip = _grip(self.arm, self.grasp, d, grasped | released, target, mask)
+        let_go = jnp.where(released, jnp.clip(jnp.linalg.norm(self.arm.eef_pos(d) - pos) / _LET_GO, 0., 1.), 0.)
+        return _progress(reach, grip, grasped | released, *carry, let_go), released
+
+    def _released(self, d, i, pos, offset, grasped):
+        """Whether object `i` at `pos`, at horizontal distance `offset` from its target, is let go of where it is placed."""
+        height = pos[2] - self._place_height(d)
+        return (offset == 0.) & ~grasped & (height > -_ALIGN) & (height < _RELEASE_HEIGHT) & self._releasable(d, i, pos)
+
+    def progress(self, d):
+        """
+        With `single`, the progress of the observed object, with the gripper upright. Otherwise the mean over the objects
+        of: each released object's progress, and, for the one unreleased object furthest along, its progress with the
+        gripper upright; the others count 0.
+        """
+        upright = _upright(self.arm, d)
+        if self.single:
+            return self._object_progress(d, self.observed[0])[0] * upright
+        each = [self._object_progress(d, i) for i in range(len(self.bodies))]
+        progress = jnp.stack([p for p, _ in each])
+        released = jnp.stack([r for _, r in each])
+        done = jnp.sum(jnp.where(released, progress, 0.))
+        best_open = jnp.max(jnp.where(released, 0., progress))
+        return (done + best_open * upright) / len(self.bodies)
+
+
+class MimicGenNutAssembly(_MimicGenPlacement, NutAssembly):
+    """MimicGen's Square_D0/D1/D2 and NutAssembly_D0: nuts onto their pegs."""
+
+
+class MimicGenPickPlace(_MimicGenPlacement, PickPlace):
+    """MimicGen's PickPlace_D0: every object into its bin, each lowered to its own resting height."""
+    def __init__(self, spec, m, arms):
+        super().__init__(spec, m, arms)
+        self.place_heights = np.asarray(spec["place_heights"])
+
+    def _carry(self, d, i, pos, offset):
+        return _lift_and_carry(pos[2], offset, self.place_heights[i], self._clearance(d), self.carry_scale)
+
+    def _released(self, d, i, pos, offset, grasped):
+        """Whether object `i` is let go of over its bin, below `_RELEASE_HEIGHT` above its resting height, standing or not."""
+        over = jnp.all((self.bin_low[i] < pos[:2]) & (pos[:2] < self.bin_high[i]))
+        return over & ~grasped & (self.bin_z < pos[2]) & (pos[2] < self.place_heights[i] + _RELEASE_HEIGHT)
+
+
+# distance of the gripper from a handle or button pad within which reaching it counts finely
+_HANDLE_FINE = 0.05
+# distance of the gripper from the pot within which reaching it to push it counts finely
+_PUSH_REACH = 0.1
+
+
+# force on the gripper above which robosuite-task-zoo's environments report contact
+_CONTACT_FORCE = 2.
+
+
+def _force_obs(arm, sensor, d):
+    """robosuite-task-zoo's observations of the force on `arm`'s gripper, measured by force sensor `sensor`."""
+    norm = jnp.linalg.norm(d.sensordata[sensor + np.arange(3)])
+    return {f"{arm.prefix}eef_force_norm": norm[None], f"{arm.prefix}contact": (norm > _CONTACT_FORCE)[None]}
+
+
+class HammerCleanup(Task):
+    """MimicGen's HammerCleanup: the hammer put into the drawer and the drawer closed."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.hammer, self.cabinet = m.body(spec["hammer"]).id, m.body(spec["cabinet"]).id
+        self.slide = int(m.jnt_qposadr[m.joint(spec["slide"]).id])
+        self.bottom, self.handle = m.geom(spec["drawer_bottom"]).id, m.geom(spec["drawer_handle"]).id
+        self.closed, self.opened, self.ajar = spec["drawer_closed"], spec["drawer_opened"], spec["drawer_ajar"]
+        self.bottom_half = np.asarray(m.geom_size[self.bottom])
+        self.in_drawer_z, self.in_drawer_y = spec["in_drawer_z"], spec["in_drawer_y"]
+        self.target_offset = np.asarray(spec["drawer_target_offset"])
+        self.clearance, self.release_height = spec["drawer_clearance"], spec["release_height"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["hammer_geoms"]])
+        self.force = int(m.sensor_adr[m.sensor(spec["force_sensor"]).id])
+        self.on_bottom = ContactTest(m, [self.bottom], _ids(m.geom, spec["hammer_geoms"]))
+
+    def object_obs(self, d, cache):
+        bodies = (self.hammer, self.cabinet)
+        return jnp.concatenate([part for body in bodies for part in _pose_to_gripper(self.arm, d, body)])
+
+    def extra_obs(self, d):
+        return _force_obs(self.arm, self.force, d)
+
+    def _in_drawer(self, d):
+        """The success test of the hammer's placement: within a world box (D0) or touching the drawer's bottom (D1)."""
+        if self.in_drawer_z is None:
+            return self.on_bottom(d)
+        pos = d.xpos[self.hammer]
+        return (pos[2] > self.in_drawer_z[0]) & (pos[2] < self.in_drawer_z[1]) & (pos[1] > self.in_drawer_y)
+
+    def success(self, d):
+        return self._in_drawer(d) & (d.qpos[self.slide] > self.closed)
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def _target(self, d):
+        """Where the hammer rests on the part of the drawer's bottom outside the cabinet when the drawer is open."""
+        return d.geom_xpos[self.bottom] + d.geom_xmat[self.bottom].reshape(3, 3) @ self.target_offset
+
+    def _over_bottom(self, d):
+        """Whether the hammer is above the drawer's bottom, within `release_height` of it."""
+        rel = d.geom_xmat[self.bottom].reshape(3, 3).T @ (d.xpos[self.hammer] - d.geom_xpos[self.bottom])
+        return jnp.all(jnp.abs(rel[:2]) < self.bottom_half[:2]) & (rel[2] > 0.) & (rel[2] < self.release_height)
+
+    def progress(self, d):
+        """
+        A third each for pulling the drawer open by its handle; reaching, holding and carrying the hammer onto the
+        drawer's bottom once the drawer is ajar, held once released over it; and pushing the drawer closed.
+        """
+        q = d.qpos[self.slide]
+        eef = self.arm.eef_pos(d)
+        handle = _fine(jnp.linalg.norm(eef - d.geom_xpos[self.handle]), _REACH_SCALE, _HANDLE_FINE)
+        opening = 0.5 * handle + 0.5 * _ramp(jnp.maximum(q - self.opened, 0.), -self.opened)
+        closing = 0.5 * handle + 0.5 * _ramp(jnp.maximum(self.closed - q, 0.), self.closed - self.opened)
+
+        hammer = d.xpos[self.hammer]
+        target = self._target(d)
+        held = self.grasp.held(d)
+        placed = self.on_bottom(d) | self._in_drawer(d) | self._over_bottom(d)
+        released = ~held & placed
+        reach = jnp.where(released, 1., _reach(self.arm, d, hammer))
+        grip = _grip(self.arm, self.grasp, d, held | released, hammer)
+        offset = jnp.linalg.norm(hammer[:2] - target[:2])
+        carry = _lift_and_carry(hammer[2], offset, target[2], target[2] + self.clearance, self.carry_scale)
+        carrying = _progress(reach, grip, held | released, *carry)
+        return jnp.where(released, (2. + closing) / 3., jnp.where(q < self.ajar, (1. + carrying) / 3., opening / 3.))
+
+
+class Kitchen(Task):
+    """
+    MimicGen's Kitchen: the stove turned on, the pot put on it, the bread put in the pot, the pot pushed into the
+    serving region, and the stove turned off. Success depends on whether the stove has ever been on with the pot on it
+    and the bread in the pot, a flag kept outside the simulator state in the task's memory.
+    """
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.bodies = _ids(m.body, spec["object_bodies"])
+        self.stove, self.bread, self.pot = m.body(spec["stove"]).id, m.body(spec["bread"]).id, m.body(spec["pot"]).id
+        self.region = m.body(spec["serving_region"]).id
+        self.hinge = int(m.jnt_qposadr[m.joint(spec["button_hinge"]).id])
+        self.pad = m.geom(spec["button_pad"]).id
+        self.button_off, self.button_on = spec["button_off"], spec["button_on"]
+        self.button_max = float(m.jnt_range[m.joint(spec["button_hinge"]).id, 1])
+        self.region_half = jnp.asarray(spec["region_half_size"])
+        self.pot_walls = np.asarray(_ids(m.geom, spec["pot_grip_geoms"]))
+        self.pot_on_stove, self.pot_on_region = spec["pot_on_stove_height"], spec["pot_on_region_height"]
+        self.bread_in_pot = spec["bread_in_pot_height"]
+        self.pot_clearance, self.bread_clearance = spec["pot_clearance"], spec["bread_clearance"]
+        self.pot_inner_half = np.asarray(spec["pot_inner_half_size"])
+        self.release_height = spec["bread_release_height"]
+        self.stove_half, self.pot_release_height = spec["stove_half_size"], spec["pot_release_height"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["pot_geoms"], spec["bread_geoms"]])
+        self.bread_touches_pot = ContactTest(m, _ids(m.geom, spec["bread_geoms"]), _ids(m.geom, spec["pot_geoms"]))
+        self.pot_on_burner = ContactTest(m, [m.geom(spec["pot_bottom"]).id], [m.geom(spec["burner"]).id])
+        self.force = int(m.sensor_adr[m.sensor(spec["force_sensor"]).id])
+
+    def object_obs(self, d, cache):
+        return jnp.concatenate([part for body in self.bodies for part in _pose_to_gripper(self.arm, d, body)])
+
+    def extra_obs(self, d):
+        return _force_obs(self.arm, self.force, d)
+
+    def _on(self, d):
+        return d.qpos[self.hinge] >= self.button_on
+
+    def _in_region(self, d):
+        return jnp.all(jnp.abs(d.xpos[self.region] - d.xpos[self.pot]) < self.region_half)
+
+    def _cooking(self, d):
+        return self._on(d) & self.bread_touches_pot(d) & self.pot_on_burner(d)
+
+    def initial_memory(self):
+        return (jnp.zeros((), bool),)
+
+    def remember(self, d, memory):
+        """Whether the stove has been on with the pot on it and the bread in the pot, in `d` or before."""
+        cooked, = memory
+        return (cooked | self._cooking(d),)
+
+    def success(self, d, cooked):
+        return self._in_region(d) & ~self._on(d) & self.bread_touches_pot(d) & cooked
+
+    def reward(self, d, cooked):
+        return self.success(d, cooked).astype(jnp.float32)
+
+    def _bread_inside(self, d):
+        """Whether the bread's center lies within the pot's walls, at most `release_height` above the pot."""
+        pot_rot = quat2mat(wxyz_to_xyzw(d.xquat[self.pot]))
+        rel = pot_rot.T @ (d.xpos[self.bread] - d.xpos[self.pot])
+        return jnp.all(jnp.abs(rel[:2]) < self.pot_inner_half) & (rel[2] > 0.) & (rel[2] < self.release_height)
+
+    def _pot_over_stove(self, d):
+        """Whether the pot lies over the stove's top, at most `pot_release_height` above its resting height."""
+        rel = d.xpos[self.pot] - d.xpos[self.stove]
+        return jnp.all(jnp.abs(rel[:2]) < self.stove_half) & (rel[2] < self.pot_on_stove + self.pot_release_height)
+
+    def _pot_grip(self, d):
+        """The pot wall nearest the gripper, which the demonstrations pinch."""
+        walls = d.geom_xpos[self.pot_walls]
+        return walls[jnp.argmin(jnp.linalg.norm(walls - self.arm.eef_pos(d), axis=-1))]
+
+    def _button(self, d, toward):
+        """Reaching the button's pad and turning the switch from `button_off` to on (`toward` 1) or back off (-1)."""
+        q = d.qpos[self.hinge]
+        reach = _fine(jnp.linalg.norm(self.arm.eef_pos(d) - d.geom_xpos[self.pad]), _REACH_SCALE, _HANDLE_FINE)
+        travel = self.button_on - self.button_off
+        turned = jnp.where(
+            toward > 0, _ramp(jnp.maximum(self.button_on - q, 0.), travel),
+            _ramp(jnp.maximum(q - self.button_on, 0.), self.button_max - self.button_on),
+        )
+        return 0.5 * reach + 0.5 * turned
+
+    def _carry(self, d, i, pos, target, place, clearance, placed):
+        """Reaching, holding and carrying grasp object `i` (0 pot, 1 bread) at `pos` to `target`; held once `placed`."""
+        objects = np.arange(2) == i
+        held = self.grasp.held(d, objects)
+        released = ~held & placed
+        grip_point = self._pot_grip(d) if i == 0 else pos
+        reach = jnp.where(released, 1., _reach(self.arm, d, grip_point))
+        grip = _grip(self.arm, self.grasp, d, held | released, grip_point, objects)
+        carry = _lift_and_carry(pos[2], jnp.linalg.norm(pos[:2] - target[:2]), place, clearance, self.carry_scale)
+        return _progress(reach, grip, held | released, *carry)
+
+    def progress(self, d, cooked):
+        """
+        A fifth for each stage in the demonstrations' order: turning the stove on, putting the pot on the stove, putting
+        the bread in the pot, carrying or pushing the pot into the serving region with the bread inside it, and turning
+        the stove off. The first three count as done once the stove has been on with the pot on it and the bread in the
+        pot.
+        """
+        pot, bread, stove, region = d.xpos[self.pot], d.xpos[self.bread], d.xpos[self.stove], d.xpos[self.region]
+        on, on_burner = self._on(d), self.pot_on_burner(d)
+        place_stove = stove[2] + self.pot_on_stove
+        pot_to_stove = self._carry(
+            d, 0, pot, stove, place_stove, place_stove + self.pot_clearance, on_burner | self._pot_over_stove(d),
+        )
+        place_bread = pot[2] + self.bread_in_pot
+        bread_to_pot = self._carry(d, 1, bread, pot, place_bread, pot[2] + self.bread_clearance, self._bread_inside(d))
+        before = jnp.where(~on, self._button(d, 1), jnp.where(~on_burner, 1. + pot_to_stove, 2. + bread_to_pot))
+
+        in_region, inside = self._in_region(d), self._bread_inside(d)
+        place_region = region[2] + self.pot_on_region
+        carried = self._carry(d, 0, pot, region, place_region, place_region + self.pot_clearance, in_region)
+        pushed = 0.4 * _fine(jnp.linalg.norm(self.arm.eef_pos(d) - pot), _REACH_SCALE, _PUSH_REACH) + 0.6 * _fine(
+            jnp.linalg.norm(pot[:2] - region[:2]), self.carry_scale, self.region_half[0],
+        )
+        pot_to_region = jnp.where(inside, jnp.maximum(carried, pushed), 0.)
+        after = jnp.where(in_region & inside, 1. + self._button(d, -1), pot_to_region)
+        return jnp.where(cooked, 3. + after, before) / 5.
+
+def _yaw(d, body):
+    R = d.xmat[body].reshape(3, 3)
+    return jnp.arctan2(R[1, 0], R[0, 0])
+
+
+class ThreePieceAssembly(Task):
+    """MimicGen's ThreePieceAssembly: piece 1 dropped into the base's square hole, then piece 2 set over piece 1's ridge."""
+    def __init__(self, spec, m, arms):
+        self.arm = arms[0]
+        self.base, self.piece_1, self.piece_2 = (m.body(spec[k]).id for k in ("base", "piece_1", "piece_2"))
+        self.grip_1, self.grip_2 = m.geom(spec["piece_1_grip"]).id, m.geom(spec["piece_2_grip"]).id
+        self.xy_thresh, self.z_thresh = spec["xy_thresh"], spec["z_thresh"]
+        self.piece_2_height = spec["piece_2_height"]
+        self.rest_1, self.rest_2 = spec["piece_1_rest_height"], spec["piece_2_rest_height"]
+        self.clearance_1, self.clearance_2 = spec["piece_1_clearance"], spec["piece_2_clearance"]
+        self.hole_half, self.slab_half = spec["hole_half_width"], spec["slab_half_width"]
+        self.slot_half, self.ridge_half = spec["slot_half_width"], spec["ridge_half_size"]
+        self.seat_slack, self.release_height = spec["seat_slack"], spec["release_height"]
+        self.goal_tolerance, self.release_radius = spec["goal_tolerance"], spec["release_radius"]
+        self.carry_scale = spec["carry_scale"]
+        self.grasp = _Grasp(m, spec["pad_geoms"], [spec["piece_1_geoms"], spec["piece_2_geoms"]])
+        self.only_1, self.only_2 = np.array([True, False]), np.array([False, True])
+
+    def object_obs(self, d, cache):
+        return jnp.concatenate([part for body in (self.base, self.piece_1, self.piece_2) for part in _pose_to_gripper(self.arm, d, body)])
+
+    def extra_obs(self, d):
+        """MimicGen's grip-site poses relative to the base and to each piece."""
+        prefix, obs = self.arm.prefix, {}
+        for name, body in (("base", self.base), ("piece_1", self.piece_1), ("piece_2", self.piece_2)):
+            obs[f"{prefix}eef_pos_rel_{name}"], obs[f"{prefix}eef_quat_rel_{name}"] = _gripper_in(self.arm, d, body)
+        return obs
+
+    def _first_assembled(self, d):
+        return (jnp.linalg.norm(d.xpos[self.piece_1, :2] - d.xpos[self.base, :2]) < self.xy_thresh) & ~self.grasp(d, self.only_1)
+
+    def success(self, d):
+        base, p1, p2 = d.xpos[self.base], d.xpos[self.piece_1], d.xpos[self.piece_2]
+        stacked = (jnp.linalg.norm(p1[:2] - p2[:2]) < self.xy_thresh) & (jnp.abs(p2[2] - base[2] - self.piece_2_height) < self.z_thresh)
+        return self._first_assembled(d) & stacked & ~self.grasp(d, self.only_2)
+
+    def reward(self, d):
+        return self.success(d).astype(jnp.float32)
+
+    def _hole_margin(self, d):
+        """How far the base's square hole clears piece 1's slab in the base's frame: positive once the slab fits through."""
+        yaw = _yaw(d, self.piece_1) - _yaw(d, self.base)
+        extent = self.slab_half * (jnp.abs(jnp.cos(yaw)) + jnp.abs(jnp.sin(yaw)))
+        off = (d.xmat[self.base].reshape(3, 3).T @ (d.xpos[self.piece_1] - d.xpos[self.base]))[:2]
+        return self.hole_half - extent - jnp.max(jnp.abs(off))
+
+    def _slot_margin(self, d):
+        """How far piece 2's slot (along its y axis) clears piece 1's ridge across the slot: positive once it fits over."""
+        yaw = _yaw(d, self.piece_1) - _yaw(d, self.piece_2)
+        extent = self.ridge_half[0] * jnp.abs(jnp.cos(yaw)) + self.ridge_half[1] * jnp.abs(jnp.sin(yaw))
+        off = (d.xmat[self.piece_2].reshape(3, 3).T @ (d.xpos[self.piece_1] - d.xpos[self.piece_2]))[0]
+        return self.slot_half - extent - jnp.abs(off)
+
+    def _released(self, d, piece, target, place, margin, held):
+        """
+        Whether `piece`, let go of, is centered over `target` within `release_radius` and rests at height `place` or drops
+        toward it from within `release_height` above, fitting (positive `margin`) unless already at `place`.
+        """
+        pos = d.xpos[piece]
+        height = pos[2] - place
+        centered = jnp.linalg.norm(pos[:2] - target[:2]) < self.release_radius
+        resting = jnp.abs(height) < self.seat_slack
+        dropping = (height > 0.) & (height < self.release_height) & (margin > 0.)
+        return ~held & centered & (resting | dropping)
+
+    def _placing(self, d, piece, grip, target, place, clearance, margin, mask):
+        """
+        Progress of placing `piece`, and whether it rests at its goal: reaching its grip geom from above, holding it,
+        lifting it to `clearance`, carrying it over `target` and fitting it (level, centered and turned so it fits), and
+        lowering it to `place`, with horizontal distance to `target` counted beyond `goal_tolerance`. Released at its goal
+        counts as held.
+        """
+        pos = d.xpos[piece]
+        held = self.grasp.held(d, mask)
+        released = self._released(d, piece, target, place, margin, held)
+        offset = jnp.maximum(jnp.linalg.norm(pos[:2] - target[:2]) - self.goal_tolerance, 0.)
+        up, over, down = _lift_and_carry(pos[2], offset, place, clearance, self.carry_scale)
+        level = jnp.clip(d.xmat[piece].reshape(3, 3)[2, 2], 0., 1.)
+        fits = _fine(1. - level, _LEVEL_SCALE, _LEVEL_FINE) * _fine(jnp.maximum(-margin, 0.), _FINE_ALIGN, _FIT_FINE)
+        reach = jnp.where(released, 1., _reach(self.arm, d, d.geom_xpos[grip]))
+        grip_ = _grip(self.arm, self.grasp, d, held | released, d.geom_xpos[grip], mask)
+        progress = _progress(reach, grip_, held | released, up, 0.5 * (over + up * fits), down)
+        return progress, released & (jnp.abs(pos[2] - place) < self.seat_slack)
+
+    def progress(self, d):
+        """Half for seating piece 1 in the base; half, once piece 1 rests in the base, for setting piece 2 on it."""
+        base, p1 = d.xpos[self.base], d.xpos[self.piece_1]
+        first, seated = self._placing(
+            d, self.piece_1, self.grip_1, base, base[2] + self.rest_1, base[2] + self.clearance_1, self._hole_margin(d), self.only_1,
+        )
+        second, _ = self._placing(
+            d, self.piece_2, self.grip_2, p1, base[2] + self.rest_2, base[2] + self.clearance_2, self._slot_margin(d), self.only_2,
+        )
+        return 0.5 * first + 0.5 * jnp.where(seated, second, 0.)
+
+
+class CoffeePreparation(Coffee):
+    """
+    MimicGen's CoffeePreparation: the mug set upright on the coffee machine's base plate, the pod taken from the drawer
+    into the machine's holder, and the lid closed over it.
+    """
+    def __init__(self, spec, m, arms):
+        super().__init__(spec, m, arms)
+        self.drawer, self.mug = m.body(spec["drawer"]).id, m.body(spec["mug"]).id
+        self.slide = int(m.jnt_qposadr[m.joint(spec["drawer_slide"]).id])
+        self.handle = m.geom(spec["drawer_handle"]).id
+        self.drawer_open = spec["drawer_open"]
+        self.lid_ready = spec["lid_ready"]
+        self.mug_upright_tol = spec["mug_upright_tol"]
+        self.mug_grip_offset = jnp.asarray(spec["mug_grip_offset"])
+        self.mug_place_offset = jnp.asarray(spec["mug_place_offset"])
+        self.mug_clearance = spec["mug_clearance"]
+        self.mug_carry_scale = spec["mug_carry_scale"]
+        self.mug_grasp = _Grasp(m, spec["mug_pad_geoms"], [spec["mug_geoms"]])
+        self.mug_on_base = ContactTest(m, _ids(m.geom, [spec["base_geom"]]), _ids(m.geom, spec["mug_geoms"]))
+
+    def object_obs(self, d, cache):
+        bodies = (self.pod, self.machine, self.holder, self.lid, self.drawer, self.mug)
+        poses = [part for body in bodies for part in _pose_to_gripper(self.arm, d, body)]
+        return jnp.concatenate([*poses, d.qpos[self.hinge][None], d.qpos[self.slide][None]])
+
+    def _mug_placed(self, d):
+        upright = 1. - d.xmat[self.mug].reshape(3, 3)[2, 2] < self.mug_upright_tol
+        return upright & self.mug_on_base(d)
+
+    def success(self, d):
+        return super().success(d) & self._mug_placed(d)
+
+    def _rotated(self, d, body, offset):
+        return d.xpos[body] + quat2mat(wxyz_to_xyzw(d.xquat[body])) @ offset
+
+    def _mug_progress(self, d):
+        """Reaching the mug's rim, holding it, carrying it onto the base plate under the holder; 1 once released there."""
+        mug = d.xpos[self.mug]
+        held = self.mug_grasp.held(d)
+        done = ~held & self._mug_placed(d)
+        grip_point = self._rotated(d, self.mug, self.mug_grip_offset)
+        target = self._rotated(d, self.holder, self.mug_place_offset)
+        offset = jnp.linalg.norm(mug[:2] - target[:2])
+        reach = _reach(self.arm, d, grip_point)
+        grip = _grip(self.arm, self.mug_grasp, d, held, grip_point)
+        carry = _lift_and_carry(mug[2], offset, target[2], target[2] + self.mug_clearance, self.mug_carry_scale)
+        return jnp.where(done, 1., _progress(reach, grip, held, *carry)), done
+
+    def _pod_progress(self, d):
+        """`Coffee.progress`'s pod half: reaching, holding, carrying the pod into the holder; held once released in it."""
+        pod, holder = d.xpos[self.pod], d.xpos[self.holder]
+        held = self.grasp.held(d)
+        released = ~held & self._pod_in_holder(d)
+        place = holder[2] + self.pod_rest_height
+        offset = jnp.linalg.norm(pod[:2] - holder[:2])
+        reach = jnp.where(released, 1., _reach(self.arm, d, pod))
+        grip = _grip(self.arm, self.grasp, d, held | released, pod)
+        carry = _lift_and_carry(pod[2], offset, place, holder[2] + self.holder_half[2] + 2. * self.pod_half[2], self.carry_scale)
+        return _progress(reach, grip, held | released, *carry), held, released
+
+    def progress(self, d):
+        """
+        In the demonstrations' order, each stage's reaching counting once the stages before it are done: placing the
+        mug (0.25), opening the lid (0.1), pulling the drawer open (0.1), putting the pod in the holder (0.35), and
+        closing the lid over it (0.2). Opening the lid and the drawer count as done once the pod is held or in place.
+        """
+        mug, mug_done = self._mug_progress(d)
+        pod, pod_held, pod_in = self._pod_progress(d)
+        pod_taken = pod_held | pod_in
+
+        hinge = d.qpos[self.hinge]
+        opened = jnp.clip(hinge / self.lid_ready, 0., 1.)
+        lid_ready = opened >= 1.
+        reach_lid = jnp.where(lid_ready, 1., jnp.where(mug_done, _reach(self.arm, d, d.xpos[self.lid]), 0.))
+        lid = jnp.where(pod_taken, 1., 0.25 * reach_lid + 0.75 * opened)
+
+        pulled = jnp.clip(-d.qpos[self.slide] / self.drawer_open, 0., 1.)
+        drawer_ready = pulled >= 1.
+        reach_handle = jnp.where(drawer_ready, 1., jnp.where(lid_ready, _reach(self.arm, d, d.geom_xpos[self.handle]), 0.))
+        drawer = jnp.where(pod_taken, 1., 0.25 * reach_handle + 0.75 * pulled)
+
+        pod = jnp.where(pod_taken | (lid_ready & drawer_ready), pod, 0.)
+        closed = _ramp(jnp.maximum(hinge - self.lid_closed, 0.), self.hinge_open - self.lid_closed)
+        close = jnp.where(pod_in, closed, 0.)
+        return 0.25 * mug + 0.1 * lid + 0.1 * drawer + 0.35 * pod + 0.2 * close
+
+
 TASKS = {
     "lift": Lift,
     "can": PickPlace,
@@ -995,6 +1610,29 @@ TASKS = {
     "tool_hang": ToolHang,
     "transport": TwoArmTransport,
     "stack_d0": Stack,
+    "stack_d1": Stack,
+    "stack_three_d0": StackThree,
+    "stack_three_d1": StackThree,
     "coffee_d0": Coffee,
+    "coffee_d1": Coffee,
+    "coffee_d2": Coffee,
+    "coffee_preparation_d0": CoffeePreparation,
+    "coffee_preparation_d1": CoffeePreparation,
     "threading_d0": Threading,
+    "mug_cleanup_d0": MugCleanup,
+    "mug_cleanup_d1": MugCleanup,
+    "square_d0": MimicGenNutAssembly,
+    "square_d1": MimicGenNutAssembly,
+    "square_d2": MimicGenNutAssembly,
+    "nut_assembly_d0": MimicGenNutAssembly,
+    "pick_place_d0": MimicGenPickPlace,
+    "hammer_cleanup_d0": HammerCleanup,
+    "hammer_cleanup_d1": HammerCleanup,
+    "threading_d1": Threading,
+    "threading_d2": Threading,
+    "three_piece_assembly_d0": ThreePieceAssembly,
+    "three_piece_assembly_d1": ThreePieceAssembly,
+    "three_piece_assembly_d2": ThreePieceAssembly,
+    "kitchen_d0": Kitchen,
+    "kitchen_d1": Kitchen,
 }

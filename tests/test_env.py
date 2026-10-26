@@ -15,10 +15,12 @@ import pytest
 import jax
 import jax.numpy as jnp
 import jax_pomdps as pomdps
+import mujoco
 import warp as wp
 
-from robomimic.data import hdf5, registry
+from robomimic.data import generate, hdf5, registry
 from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, Pixels, RobomimicPOMDP, parked_joints, registry_name
+from robomimic.env.geometry import ContactTest
 from robomimic.env.render import CameraRenderer
 
 NUM_WORLDS = 4
@@ -37,6 +39,35 @@ def lift_test_dataset():
             repo_id=registry.HF_REPO_ID, filename="test/test_v15.hdf5", download_dir=folder, check_overwrite=False
         )
     return path
+
+
+_SHARED = {"task": None, "envs": {}}
+
+
+def _env(task, variant="", model_xml=None, max_worlds=NUM_WORLDS):
+    """
+    The environment of `task` under registry variant `variant`, or simulating robosuite model xml `model_xml`, shared by
+    the tests of the task; the environments of the previous task are dropped.
+    """
+    if _SHARED["task"] != task:
+        _SHARED["task"], _SHARED["envs"] = task, {}
+        gc.collect()
+    key = (variant, model_xml, max_worlds)
+    if key not in _SHARED["envs"]:
+        _SHARED["envs"][key] = (
+            RobomimicPOMDP(task, model_xml=model_xml, max_worlds=max_worlds) if model_xml is not None
+            else pomdps.make(f"robomimic.env:{registry_name(task)}{variant}", max_worlds=max_worlds)
+        )
+    return _SHARED["envs"][key]
+
+
+def _jit(env, name, vmap=False):
+    """`env`'s method `name`, jitted (and mapped over worlds with `vmap`) once per environment."""
+    cache = env.__dict__.setdefault("_test_jits", {})
+    if (name, vmap) not in cache:
+        method = getattr(env, name)
+        cache[name, vmap] = jax.jit(jax.vmap(method) if vmap else method)
+    return cache[name, vmap]
 
 
 def _task_dataset(task, filename="demo_v15.hdf5"):
@@ -63,6 +94,16 @@ def _demo(path, name):
         )
 
 
+def _recorded_states(env, flats):
+    """States at a demo's recorded states `flats`, each with the task's memory of the states up to it."""
+    def remember(memory, flat):
+        memory = env._task.remember(env.state_from_flat(flat).data, memory)
+        return memory, memory
+
+    _, memory = jax.jit(lambda f: jax.lax.scan(remember, env._task.initial_memory(), f))(jnp.asarray(flats, jnp.float32))
+    return _jit(env, "state_from_flat", vmap=True)(flats)._replace(memory=memory)
+
+
 def _episode_states(env, demo, starts):
     """States at the demo's steps `starts` with the controller state the demo had there."""
     grip = jnp.zeros((len(env.arms), 2), jnp.float32)
@@ -72,7 +113,7 @@ def _episode_states(env, demo, starts):
         action = jnp.asarray(demo["actions"][t], jnp.float32)
         grip = jnp.stack([arm.step_grip(g, action) for arm, g in zip(env.arms, grip)])
     q0 = tuple(jnp.asarray(demo["states"][0][1:][arm.qpos], jnp.float32) for arm in env.arms)
-    states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"][starts])
+    states = _jit(env, "state_from_flat", vmap=True)(demo["states"][starts])
     return states._replace(grip=jnp.stack([grips[t] for t in starts]), q0=tuple(jnp.broadcast_to(q, (len(starts),) + q.shape) for q in q0))
 
 
@@ -84,7 +125,7 @@ def _live_qpos(m, flat):
 
 @pytest.fixture(scope="module", params=list(TASKS))
 def env(request):
-    return pomdps.make("robomimic.env:" + registry_name(request.param), max_worlds=NUM_WORLDS)
+    return _env(request.param)
 
 
 def test_tasks_are_registered_pomdps(env):
@@ -107,11 +148,11 @@ def test_names_without_a_reward_variant_are_dense_and_sparse_names_are_sparse(ta
     key = jax.random.key(0)
     rewards = {}
     for suffix in ["", "/sparse"]:
-        env = pomdps.make(f"robomimic.env:{registry_name(task)}{suffix}", max_worlds=1)
+        env = _env(task, suffix)
         down = jnp.zeros(env.action_space.shape).at[np.array([arm.arm_action.start + 2 for arm in env.arms])].set(-1.)
-        state = jax.jit(env.reset)(key)
-        next_state = jax.jit(env.step)(key, state, down)
-        rewards[suffix] = float(jax.jit(env.reward)(key, state, down, next_state))
+        state = _jit(env, "reset")(key)
+        next_state = _jit(env, "step")(key, state, down)
+        rewards[suffix] = float(_jit(env, "reward")(key, state, down, next_state))
     assert rewards["/sparse"] == 0.
     assert rewards[""] != 0.
 
@@ -119,14 +160,19 @@ def test_names_without_a_reward_variant_are_dense_and_sparse_names_are_sparse(ta
 @pytest.mark.parametrize("task", list(TASKS))
 def test_dense_rewards_along_a_demo_pay_one_for_success_plus_the_progress_it_makes(task):
     demo = _demo(_task_dataset(task), "demo_0")
-    env = pomdps.make(f"robomimic.env:{registry_name(task)}", max_worlds=len(demo["states"]))
-    from_flat = jax.jit(jax.vmap(env.state_from_flat))
-    success = np.asarray(jax.vmap(env.success)(from_flat(demo["states"])))
+    env = _env(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
+    states = _recorded_states(env, demo["states"])
+    success = np.asarray(jax.vmap(env.success)(states))
     end = int(np.argmax(success))
     assert success[end] and not success[:end].any()
-    before, after = from_flat(demo["states"][:end]), from_flat(demo["states"][1:end + 1])
+    from_flat = _jit(env, "state_from_flat", vmap=True)
+    before, after = (
+        from_flat(demo["states"][steps])._replace(memory=jax.tree.map(lambda x: x[steps], states.memory))
+        for steps in (slice(0, end), slice(1, end + 1))
+    )
     rewards = np.asarray(jax.jit(jax.vmap(lambda s, n: env.reward(None, s, None, n)))(before, after))
-    start = float(env._task.progress(jax.jit(env.state_from_flat)(demo["states"][0]).data))
+    first = _jit(env, "state_from_flat")(demo["states"][0])
+    start = float(env._task.progress(first.data, *jax.tree.map(lambda x: x[0], states.memory)))
     np.testing.assert_allclose(rewards.sum(), 1. + (1. - start), atol=1e-4)
     assert rewards[-1] >= 1.
     assert np.all(np.abs(rewards[:-1]) <= 1.)
@@ -136,24 +182,24 @@ def test_dense_rewards_along_a_demo_pay_one_for_success_plus_the_progress_it_mak
 def test_variants_observe_low_dim_proprioception_images_or_markov_state(task):
     name = registry_name(task)
     cameras, size = PIXELS[task]
-    env = pomdps.make(f"robomimic.env:{name}", max_worlds=1)
+    env = _env(task)
     low_dim = env.observation_space.spaces
     extra = set(jax.eval_shape(lambda s: env._task.extra_obs(s.data), jax.eval_shape(env.reset, jax.random.key(0))))
     proprio = [k for k in low_dim if k != "object" and k not in extra]
     assert proprio and all(k.startswith("robot") for k in proprio)
     proprio_size = sum(int(np.prod(low_dim[k].shape)) for k in proprio)
     pixels = pomdps.spaces.Image(size, size, 3 * len(cameras))
-    prp = pomdps.make(f"robomimic.env:{name}/prp", max_worlds=1).observation_space
+    prp = _env(task, "/prp").observation_space
     assert prp.shape == (proprio_size,)
-    assert pomdps.make(f"robomimic.env:{name}/pix", max_worlds=1).observation_space == pixels
-    assert pomdps.make(f"robomimic.env:{name}/pix-prp", max_worlds=1).observation_space == pomdps.spaces.Dict(
+    assert _env(task, "/pix").observation_space == pixels
+    assert _env(task, "/pix-prp").observation_space == pomdps.spaces.Dict(
         {"pixels": pixels, "prp": prp}
     )
-    mkv = pomdps.make(f"robomimic.env:{name}/mkv", max_worlds=1).observation_space
+    mkv = _env(task, "/mkv").observation_space
     assert len(mkv.shape) == 1 and mkv.shape[0] > low_dim["object"].shape[0] + proprio_size
     for variant in ["", "/prp", "/pix", "/pix-prp", "/mkv"]:
-        env = pomdps.make(f"robomimic.env:{name}{variant}", max_worlds=1)
-        obs = jax.jit(env.observe)(None, jax.jit(env.reset)(jax.random.key(0)), None)
+        env = _env(task, variant)
+        obs = _jit(env, "observe")(None, _jit(env, "reset")(jax.random.key(0)), None)
         assert bool(env.observation_space.contains(obs)), variant
 
 
@@ -164,50 +210,63 @@ def _from_mkv(env, obs, base):
     live_qpos = _live_qpos(m, np.concatenate([[0.], qpos]))
     parked = parked_joints(m, qpos)
     live_qvel = np.setdiff1d(np.arange(m.nv), [m.jnt_dofadr[j] + np.arange(6) for j in parked])
-    sizes = [len(live_qpos), len(live_qvel), base.grip.size, sum(len(q) for q in base.q0)]
-    qpos_part, qvel_part, grip, q0_offset = jnp.split(obs[-sum(sizes):], np.cumsum(sizes)[:-1])
-    state = env.init_state(jnp.asarray(qpos).at[live_qpos].set(qpos_part), jnp.asarray(qvel).at[live_qvel].set(qvel_part))
+    memory_sizes, fixture_sizes = [x.size for x in base.memory], [x.size for x in base.fixtures]
+    sizes = [len(live_qpos), len(live_qvel), base.grip.size, *memory_sizes, *fixture_sizes, sum(len(q) for q in base.q0)]
+    qpos_part, qvel_part, grip, *parts, q0_offset = jnp.split(obs[-sum(sizes):], np.cumsum(sizes)[:-1])
+    memory, fixtures = parts[:len(memory_sizes)], parts[len(memory_sizes):]
+    fixtures = tuple(part.reshape(x.shape) for part, x in zip(fixtures, base.fixtures))
+    state = env.init_state(
+        jnp.asarray(qpos).at[live_qpos].set(qpos_part), jnp.asarray(qvel).at[live_qvel].set(qvel_part), fixtures=fixtures,
+    )
     offsets = jnp.split(q0_offset, len(base.q0))
     q0 = tuple(offset + state.data.qpos[arm.qpos] for arm, offset in zip(env.arms, offsets))
-    return state._replace(grip=grip.reshape(base.grip.shape), q0=q0)
+    memory = tuple(part.reshape(x.shape).astype(x.dtype) for part, x in zip(memory, base.memory))
+    return state._replace(grip=grip.reshape(base.grip.shape), q0=q0, memory=memory)
 
 
 @pytest.mark.parametrize("task", list(TASKS))
 def test_mkv_observation_and_action_determine_the_next_observation_reward_and_done(task):
-    env = pomdps.make(f"robomimic.env:{registry_name(task)}/mkv", max_worlds=NUM_WORLDS)
+    """
+    The state rebuilt from an "mkv" observation steps as the original does from the same solver warm start, within
+    the spread of repeated steps of the original, which contact-rich scenes make nondeterministic.
+    """
+    env = _env(task, "/mkv")
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
-    step, observe = jax.jit(jax.vmap(env.step)), jax.jit(jax.vmap(env.observe))
+    step, observe = _jit(env, "step", vmap=True), _jit(env, "observe", vmap=True)
+    reward, done = _jit(env, "reward", vmap=True), _jit(env, "done", vmap=True)
     sample = jax.vmap(env.action_space.sample)
-    states = jax.jit(jax.vmap(env.reset))(keys)
+    states = _jit(env, "reset", vmap=True)(keys)
     for i in range(3):
         states = step(keys, states, sample(jax.random.split(jax.random.key(i + 1), NUM_WORLDS)))
-    base = jax.jit(env.reset)(jax.random.key(7))
+    base = _jit(env, "reset")(jax.random.key(7))
     rebuilt = jax.jit(jax.vmap(lambda o: _from_mkv(env, o, base)))(observe(keys, states, None))
     actions = sample(jax.random.split(jax.random.key(9), NUM_WORLDS))
-    next_states, rebuilt_next = step(keys, states, actions), step(keys, rebuilt, actions)
-    np.testing.assert_allclose(
-        np.asarray(observe(keys, rebuilt_next, actions)), np.asarray(observe(keys, next_states, actions)), atol=1e-4
-    )
-    reward = jax.vmap(env.reward)
-    np.testing.assert_allclose(
-        np.asarray(reward(keys, rebuilt, actions, rebuilt_next)), np.asarray(reward(keys, states, actions, next_states)), atol=1e-4
-    )
-    done = jax.vmap(env.done)
-    np.testing.assert_array_equal(np.asarray(done(rebuilt_next)), np.asarray(done(next_states)))
+    original = states._replace(data=states.data.replace(qacc_warmstart=rebuilt.data.qacc_warmstart))
+
+    def outcome(start):
+        nxt = step(keys, start, actions)
+        return np.asarray(observe(keys, nxt, actions)), np.asarray(reward(keys, start, actions, nxt)), np.asarray(done(nxt))
+
+    repeats = [outcome(original) for _ in range(4)]
+    obs, rew, dones = outcome(rebuilt)
+    for i, got in enumerate((obs, rew)):
+        spread = max(np.abs(r[i] - repeats[0][i]).max() for r in repeats)
+        np.testing.assert_allclose(got, repeats[0][i], atol=1e-4 + 2 * spread)
+    assert np.all(np.any([dones == r[2] for r in repeats], axis=0))
 
 
 @pytest.mark.parametrize("variant", ["", "/sparse", "/mkv", "/prp"])
 def test_diverged_simulations_end_the_episode_taking_back_progress_with_finite_observations(variant):
     env = pomdps.make(f"robomimic.env:lift{variant}", max_worlds=1)
     key = jax.random.key(0)
-    state = jax.jit(env.reset)(key)
+    state = _jit(env, "reset")(key)
     diverged = state._replace(data=state.data.replace(qvel=state.data.qvel.at[0].set(jnp.nan)))
     assert not bool(env.diverged(state)) and bool(env.diverged(diverged))
-    assert bool(jax.jit(env.done)(diverged))
-    progress = 0. if variant == "/sparse" else float(env._task._potential(state.data))
-    assert float(jax.jit(env.reward)(key, state, None, diverged)) == pytest.approx(-progress)
-    assert float(jax.jit(env.reward)(key, diverged, None, diverged)) == 0.
-    obs = jax.jit(env.observe)(key, diverged, None)
+    assert bool(_jit(env, "done")(diverged))
+    progress = 0. if variant == "/sparse" else float(env._task._potential(state.data, state.memory))
+    assert float(_jit(env, "reward")(key, state, None, diverged)) == pytest.approx(-progress)
+    assert float(_jit(env, "reward")(key, diverged, None, diverged)) == 0.
+    obs = _jit(env, "observe")(key, diverged, None)
     assert all(bool(jnp.isfinite(x).all()) for x in jax.tree.leaves(obs))
 
 
@@ -220,12 +279,12 @@ def test_unknown_observations_and_rewards_are_rejected():
 
 def test_batched_reset_step_observe_under_jit_and_vmap(env):
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
-    states = jax.jit(jax.vmap(env.reset))(keys)
+    states = _jit(env, "reset", vmap=True)(keys)
     actions = jax.vmap(env.action_space.sample)(keys) * 0.3
-    next_states = jax.jit(jax.vmap(env.step))(keys, states, actions)
-    obs = jax.jit(jax.vmap(env.observe))(keys, next_states, actions)
-    rewards = jax.jit(jax.vmap(env.reward))(keys, states, actions, next_states)
-    dones = jax.jit(jax.vmap(env.done))(next_states)
+    next_states = _jit(env, "step", vmap=True)(keys, states, actions)
+    obs = _jit(env, "observe", vmap=True)(keys, next_states, actions)
+    rewards = _jit(env, "reward", vmap=True)(keys, states, actions, next_states)
+    dones = _jit(env, "done", vmap=True)(next_states)
     assert rewards.shape == (NUM_WORLDS,)
     assert dones.shape == (NUM_WORLDS,)
     assert not bool(jnp.any(jax.vmap(env.overflowed)(next_states)))
@@ -235,9 +294,9 @@ def test_batched_reset_step_observe_under_jit_and_vmap(env):
 
 
 def test_flat_state_round_trips(env):
-    state = jax.jit(env.reset)(jax.random.key(1))
+    state = _jit(env, "reset")(jax.random.key(1))
     flat = env.flat_state(state)
-    np.testing.assert_allclose(env.flat_state(jax.jit(env.state_from_flat)(flat)), flat, atol=1e-6)
+    np.testing.assert_allclose(env.flat_state(_jit(env, "state_from_flat")(flat)), flat, atol=1e-6)
 
 
 @pytest.mark.parametrize("task", list(TASKS))
@@ -246,11 +305,11 @@ def test_observations_match_dataset(task):
     right after the previous state's, which object poses relative to the gripper are cached from."""
     demo = _demo(_task_dataset(task, "low_dim_v15.hdf5"), "demo_0")
     steps = np.linspace(1, len(demo["states"]) - 1, NUM_WORLDS).astype(int)
-    env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=NUM_WORLDS)
-    init = jax.jit(jax.vmap(env.state_from_flat))
+    env = _env(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
+    init = _jit(env, "state_from_flat", vmap=True)
     previous = init(demo["states"][steps - 1])
     states = init(demo["states"][steps])._replace(cache=previous.cache)
-    obs = jax.jit(jax.vmap(env.observe))(None, states, None)
+    obs = _jit(env, "observe", vmap=True)(None, states, None)
     assert set(obs) == {k for k in demo["obs"] if not k.endswith("_image")}
     for k in obs:
         np.testing.assert_allclose(np.asarray(obs[k]), demo["obs"][k][steps], atol=1e-5, err_msg=k)
@@ -263,8 +322,8 @@ def test_camera_images_resemble_dataset_images(lift_test_dataset):
         "lift", model_xml=demo["model"], observation=Pixels(tuple(CAMERAS), height, width), max_worlds=NUM_WORLDS
     )
     steps = np.linspace(0, len(demo["states"]) - 1, NUM_WORLDS).astype(int)
-    states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"][steps])
-    pixels = np.asarray(jax.jit(jax.vmap(env.observe))(None, states, None))
+    states = _jit(env, "state_from_flat", vmap=True)(demo["states"][steps])
+    pixels = np.asarray(_jit(env, "observe", vmap=True)(None, states, None))
     renderer = CameraRenderer(env.model, CAMERAS, height, width, depth=True, nworld=NUM_WORLDS,
                               graph_mode=wp.JaxCallableGraphMode.WARP)
     rendered = jax.jit(jax.vmap(renderer))(states.data)
@@ -281,8 +340,8 @@ def test_pixel_observations_match_their_spaces_unbatched_and_mapped():
     space = env.observation_space.spaces
     assert space["pixels"] == pomdps.spaces.Image(48, 64, 3 * len(CAMERAS))
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
-    mapped = jax.jit(jax.vmap(env.observe))(keys, jax.jit(jax.vmap(env.reset))(keys), None)
-    single = jax.jit(env.observe)(keys[1], jax.jit(env.reset)(keys[1]), None)
+    mapped = _jit(env, "observe", vmap=True)(keys, _jit(env, "reset", vmap=True)(keys), None)
+    single = _jit(env, "observe")(keys[1], _jit(env, "reset")(keys[1]), None)
     for k in ["pixels", "prp"]:
         assert mapped[k].shape == (NUM_WORLDS,) + space[k].shape, k
         np.testing.assert_array_equal(np.asarray(single[k]), np.asarray(mapped[k][1]), err_msg=k)
@@ -298,8 +357,8 @@ def test_garbage_collection_pauses_while_graphs_are_captured(monkeypatch):
 
     monkeypatch.setattr(wp, "capture_begin", capture_begin)
     env = RobomimicPOMDP("lift", observation=Pixels(("agentview",), 32, 32), max_worlds=1)
-    state = jax.jit(env.step)(None, jax.jit(env.reset)(jax.random.key(0)), jnp.zeros(7))
-    jax.block_until_ready(jax.jit(env.observe)(None, state, None))
+    state = _jit(env, "step")(None, _jit(env, "reset")(jax.random.key(0)), jnp.zeros(7))
+    jax.block_until_ready(_jit(env, "observe")(None, state, None))
     assert collecting and not any(collecting)
     assert gc.isenabled()
 
@@ -307,9 +366,9 @@ def test_garbage_collection_pauses_while_graphs_are_captured(monkeypatch):
 def test_warp_callables_keep_at_most_eight_captured_graphs():
     from warp._src.jax import ffi
     env = RobomimicPOMDP("lift", max_worlds=4)
-    step = jax.jit(jax.vmap(env.step))
+    step = _jit(env, "step", vmap=True)
     keys = jax.random.split(jax.random.key(0), 4)
-    states = jax.jit(jax.vmap(env.reset))(keys)
+    states = _jit(env, "reset", vmap=True)(keys)
     for i in range(12):
         states = step(keys, states, jnp.full((4, 7), 0.1 * (i % 3) - 0.1))
     jax.block_until_ready(states)
@@ -342,9 +401,9 @@ def test_demos_end_in_success_and_start_without_it(task):
     path = _task_dataset(task)
     assert TASK_OF_ENV_NAME[hdf5.get_env_metadata_from_dataset(path)["env_name"]] == task
     demo = _demo(path, "demo_0")
-    env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=2)
-    states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"][[0, -1]])
-    first, last = np.asarray(jax.vmap(env.success)(states))
+    env = _env(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
+    success = np.asarray(jax.vmap(env.success)(_recorded_states(env, demo["states"])))
+    first, last = success[0], success[-1]
     assert not first and last
 
 
@@ -354,9 +413,9 @@ def test_one_step_transitions_match_dataset(task):
     in the coordinates that take part in the task."""
     demo = _demo(_task_dataset(task), "demo_0")
     starts = np.arange(len(demo["actions"]) - 1)
-    env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(starts))
+    env = _env(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
     states = _episode_states(env, demo, starts)
-    next_states = jax.jit(jax.vmap(env.step))(None, states, jnp.asarray(demo["actions"][starts], jnp.float32))
+    next_states = _jit(env, "step", vmap=True)(None, states, jnp.asarray(demo["actions"][starts], jnp.float32))
     assert not bool(jnp.any(jax.vmap(env.overflowed)(next_states)))
     live = _live_qpos(env.model, demo["states"][0])
     error = np.abs(np.asarray(next_states.data.qpos)[:, live] - demo["states"][starts + 1][:, 1:][:, live])
@@ -369,17 +428,57 @@ def test_shaped_rewards_match_robosuite(task):
     path = _task_dataset(task)
     for name, expected in ROBOSUITE_SHAPED_REWARDS[task].items():
         demo = _demo(path, name)
-        env = RobomimicPOMDP(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
-        states = jax.jit(jax.vmap(env.state_from_flat))(demo["states"])
-        rewards = jax.jit(jax.vmap(lambda s: env._task.shaped_reward(s.data)))(states)
+        env = _env(task, model_xml=demo["model"], max_worlds=len(demo["states"]))
+        states = _recorded_states(env, demo["states"])
+        rewards = jax.jit(jax.vmap(lambda s: env._task.shaped_reward(s.data, *s.memory)))(states)
         np.testing.assert_allclose(np.asarray(rewards), expected, atol=1e-5, err_msg=name)
 
 
 def test_steps_last_the_datasets_control_period(env):
     keys = jax.random.split(jax.random.key(0), NUM_WORLDS)
-    states = jax.jit(jax.vmap(env.reset))(keys)
+    states = _jit(env, "reset", vmap=True)(keys)
     actions = jax.vmap(env.action_space.sample)(keys) * 0.3
-    step = jax.jit(jax.vmap(env.step))
+    step = _jit(env, "step", vmap=True)
     for _ in range(3):
         states = step(keys, states, actions)
     np.testing.assert_allclose(np.asarray(states.data.time), 3 * 0.05, rtol=1e-5)
+
+
+@pytest.mark.parametrize("geom", ["box", "mesh"])
+def test_contact_tests_count_contact_within_the_margin_and_slack_as_mujoco_does(geom):
+    shape = 'type="box" size="0.02 0.02 0.02"' if geom == "box" else 'type="mesh" mesh="cube"'
+    xml = f"""
+    <mujoco>
+      <asset><mesh name="cube" vertex="-.02 -.02 -.02  .02 -.02 -.02  -.02 .02 -.02  .02 .02 -.02
+                                       -.02 -.02 .02  .02 -.02 .02  -.02 .02 .02  .02 .02 .02"/></asset>
+      <worldbody>
+        <body name="a"><freejoint/><geom name="a" {shape} margin="0.002"/></body>
+        <body name="b" pos="0 0 0.1"><freejoint/><geom name="b" type="box" size="0.02 0.02 0.02"/></body>
+      </worldbody>
+    </mujoco>"""
+    m = mujoco.MjModel.from_xml_string(xml)
+    d = mujoco.MjData(m)
+    test = ContactTest(m, [m.geom("a").id], [m.geom("b").id])
+
+    def touching(gap, slack=0.):
+        d.qpos[7:10] = [0., 0., 0.04 + gap]
+        mujoco.mj_forward(m, d)
+        return bool(test(d, slack))
+
+    assert touching(-0.001)
+    assert touching(0.001)
+    assert not touching(0.004)
+    assert touching(0.004, slack=0.003)
+
+
+@pytest.mark.parametrize("task", ["square_d1", "square_d2", "mug_cleanup_d1", "kitchen_d1", "hammer_cleanup_d1"])
+def test_resets_place_every_geom_as_a_model_built_with_their_fixtures(task):
+    env = RobomimicPOMDP(task, max_worlds=1)
+    i = 7
+    names = {f: [env.model.body(int(b)).name for b in index] for f, index in env._fixture_index.items()}
+    fixtures = {f: np.asarray(x[i]) for f, x in zip(env._fixture_index, env._reset_fixtures)}
+    built = RobomimicPOMDP(task, model_xml=generate._model_file(task, fixtures, names), max_worlds=1)
+    reset = _jit(env, "reset_at")(i)
+    expected = jax.jit(built.init_state)(env._reset_qpos[i], env._reset_qvel[i])
+    np.testing.assert_allclose(np.asarray(reset.data.geom_xpos), np.asarray(expected.data.geom_xpos), atol=1e-5)
+    np.testing.assert_allclose(np.asarray(reset.data.geom_xmat), np.asarray(expected.data.geom_xmat), atol=1e-5)
