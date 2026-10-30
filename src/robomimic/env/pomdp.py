@@ -182,14 +182,24 @@ def task_spec(task: str) -> dict:
 TASK_OF_ENV_NAME = {s["env_name"]: t for t, s in _specs().items()}
 
 
-def load_model(task: str | None = None, model_xml: str | None = None) -> mujoco.MjModel:
+def _wood_table(model_xml: str) -> str:
+    """`model_xml` with its table top textured dark wood."""
+    texture = '<texture type="2d" name="tex-dark-wood" file="models/assets/textures/dark-wood.png"/>'
+    model_xml = re.sub(r'(<material\b[^>]*\bname="table_ceramic"[^>]*\btexture=)"[^"]*"', r'\1"tex-dark-wood"', model_xml)
+    return re.sub(r"<asset>", "<asset>" + texture, model_xml, count=1) if "tex-dark-wood" in model_xml else model_xml
+
+
+def load_model(task: str | None = None, model_xml: str | None = None, wood_table: bool = False) -> mujoco.MjModel:
     """
     MuJoCo model of `task`, or of a robosuite model xml such as a dataset demo's "model_file", whose asset
     paths are resolved to the bundled meshes and textures: robosuite's and MimicGen's from their `robosuite/`
-    directories, robosuite_task_zoo's under `task_zoo/`.
+    directories, robosuite_task_zoo's under `task_zoo/`. With `wood_table`, the table top looks dark wood
+    (`_wood_table`).
     """
     if model_xml is None:
         model_xml = _archive()[f"models/{task}.xml"].decode()
+    if wood_table:
+        model_xml = _wood_table(model_xml)
     model_xml = re.sub(
         r'file="(?:[^"]*/)?robosuite_task_zoo/([^"]*)"', lambda match: f'file="task_zoo/{posixpath.normpath(match[1])}"',
         model_xml,
@@ -369,8 +379,9 @@ class RobomimicPOMDP:
         self._renderer = None
         if isinstance(observation, Pixels):
             self._renderer = CameraRenderer(
-                simulated, camera_names=observation.cameras, height=observation.height, width=observation.width,
-                depth=False, nworld=max_worlds, graph_mode=graph_mode,
+                self.simulated_model(model_xml, wood_table=True), camera_names=observation.cameras,
+                height=observation.height, width=observation.width, depth=False, nworld=max_worlds,
+                graph_mode=graph_mode,
             )
         default_contacts, default_constraints = _BUFFER_SIZES[task]
         self.max_worlds = max_worlds
@@ -381,9 +392,12 @@ class RobomimicPOMDP:
         obs_shapes = jax.eval_shape(lambda s: self.observe(None, s, None), jax.eval_shape(self.reset, jax.random.key(0)))
         self.observation_space = _space(obs_shapes)
 
-    def simulated_model(self, model_xml: str | None = None) -> mujoco.MjModel:
-        """The model MuJoCo Warp simulates for robosuite model xml `model_xml`, or for the task's own model."""
-        return _simulated(_park(load_model(self._task_name, model_xml), np.asarray(self._reset_qpos[0])))
+    def simulated_model(self, model_xml: str | None = None, wood_table: bool = False) -> mujoco.MjModel:
+        """
+        The model MuJoCo Warp simulates for robosuite model xml `model_xml`, or for the task's own model; with
+        `wood_table`, as the camera images show it.
+        """
+        return _simulated(_park(load_model(self._task_name, model_xml, wood_table), np.asarray(self._reset_qpos[0])))
 
     def _fixtures(self):
         """The model fields that vary between resets, as the simulated model sets them."""

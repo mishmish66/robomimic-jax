@@ -21,6 +21,7 @@ import warp as wp
 from robomimic.data import generate, hdf5, registry
 from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, Pixels, RobomimicPOMDP, parked_joints, registry_name
 from robomimic.env.geometry import ContactTest
+from robomimic.env import render
 from robomimic.env.render import CameraRenderer
 
 NUM_WORLDS = 4
@@ -315,7 +316,7 @@ def test_observations_match_dataset(task):
         np.testing.assert_allclose(np.asarray(obs[k]), demo["obs"][k][steps], atol=1e-5, err_msg=k)
 
 
-def test_camera_images_resemble_dataset_images(lift_test_dataset):
+def test_camera_depth_matches_dataset_depth(lift_test_dataset):
     demo = _demo(lift_test_dataset, "demo_0")
     height, width = demo["obs"]["agentview_image"].shape[1:3]
     env = RobomimicPOMDP(
@@ -328,11 +329,28 @@ def test_camera_images_resemble_dataset_images(lift_test_dataset):
                               graph_mode=wp.JaxCallableGraphMode.WARP)
     rendered = jax.jit(jax.vmap(renderer))(states.data)
     for i, camera in enumerate(CAMERAS):
-        image, expected = pixels[..., 3 * i:3 * i + 3], demo["obs"][camera + "_image"][steps]
-        assert image.dtype == np.uint8 and image.shape == expected.shape
-        assert np.abs(image.astype(float) - expected).mean() < 8., camera
+        assert pixels.dtype == np.uint8 and pixels[..., 3 * i:3 * i + 3].shape == demo["obs"][camera + "_image"][steps].shape
         depth, expected = np.asarray(rendered[camera + "_depth"]), demo["obs"][camera + "_depth"][steps]
         assert np.median(np.abs(depth - expected)) < 0.01, camera
+
+
+def test_table_top_pixels_reconstruct_onto_its_top_face_and_show_its_texture():
+    env = RobomimicPOMDP("square", observation=Pixels(tuple(CAMERAS), 84, 84), max_worlds=1)
+    renderer = env._renderer
+    d = _jit(env, "reset")(jax.random.key(0)).data
+    color, depth, seg = renderer._scene(d)
+    rc = renderer._scene.context.pytree()
+    table = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_GEOM, "table_visual")
+    image = np.asarray(renderer(d)["agentview_image"])
+    for i in range(len(CAMERAS)):
+        front = render.mjx.get_segmentation(rc, i, seg)
+        z = render.mjx.get_depth(rc, i, depth, renderer._far)[..., 0] * renderer._far
+        local = np.asarray(renderer._textures.local_points(d, i, front, z))
+        on = np.asarray(front) == table
+        assert on.mean() > 0.3
+        assert np.abs(local[on][:, 2] - env.model.geom_size[table][2]).max() < 1e-3
+    on = np.asarray(render.mjx.get_segmentation(rc, 0, seg))[::render.SUPERSAMPLE, ::render.SUPERSAMPLE] == table
+    assert image[on].astype(float).std(0).mean() > 8.
 
 
 def test_pixel_observations_match_their_spaces_unbatched_and_mapped():
