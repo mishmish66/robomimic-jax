@@ -1,9 +1,10 @@
 # Tasks
 
-The five robomimic simulation tasks as POMDPs, made with `jax_pomdps.make("robomimic.env:<name>")`. Every task
-is robosuite's: its scene, robots, controller, observations, reward, and success check, re-expressed in JAX on
-MuJoCo Warp. The quotes are robosuite v1.5's docstrings; the images show the first and last state of each
-task's first released demonstration.
+robomimic's five simulation tasks and MimicGen's 26 task variants as POMDPs, made with
+`jax_pomdps.make("robomimic.env:<name>")`. Each task's scene, robots, controller, observations, reward, and success
+check are robosuite's or MimicGen's, re-expressed in JAX on MuJoCo Warp. The quotes are robosuite v1.5's docstrings;
+the images show the first and last state of each task's first released demonstration as the pixels mode renders
+them, from the camera of its image datasets.
 
 Names follow [jax_gym](https://github.com/mishmish66/jax-gym)'s scheme: dashes join words, and slashes add
 variants, the reward first and then the observation. Each task `<task>` has a dense reward and `<task>/sparse`
@@ -21,6 +22,14 @@ the datasets' sparse reward. Each such `name` observes robomimic's low-dim obser
   are from the positions its controller pulls their nullspace toward (the arm's positions at reset). The next observation, reward,
   and done follow from it and the action; it leaves out only the solver's warm start, as MuJoCo's physics state
   does.
+
+The images are this package's own, not robosuite's: MuJoCo Warp's ray tracer renders the scene's lights with
+shadows under a dim headlight, at twice the resolution averaged down, and then applies a camera's defocus,
+vignetting, warm white balance, and sensor noise seeded from the world's state, so the same state renders the same
+image batched or unbatched. Boxes and other primitives show their textures sampled where each ray hits them, the
+table top is dark wood, and robosuite's end-effector target markers are not drawn. The images therefore do not match
+robomimic's image datasets, which robosuite rendered with OpenGL; depth does. `robomimic.env.render.RENDER_VERSION`
+(2) identifies this look, so that images rendered by a different version can be told apart.
 
 `RobomimicPOMDP(task, observation=..., reward=...)` builds the same POMDPs: `observation` is `"low-dim"`,
 `"prp"`, `"mkv"`, or `Pixels(cameras, height, width, proprio)` for any cameras, and `reward` is `"dense"` (the
@@ -201,6 +210,8 @@ They also differ from the robomimic tasks in these ways:
 
 ### `stack-d0`, `stack-d1`
 
+<img src="images/stack.png" alt="Stack D0: the first and last state of demo 0" loading="lazy">
+
 A Panda arm stacks a red cube on a green one, both placed at random on the table, at any yaw, within 8 cm of its
 center in D0 and 20 cm in D1. **Success**: the red cube is not grasped, its center is more than 4 cm above the table,
 and it touches the green cube. **Object observation** (23): each cube's position and quaternion, each cube's position
@@ -209,6 +220,8 @@ the red cube, lifting it over the green cube, and lowering it onto it; a red cub
 counts as held. **Shaped reward**: robosuite's staged reward, halved.
 
 ### `stack-three-d0`, `stack-three-d1`
+
+<img src="images/stack_three.png" alt="Stack Three D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm stacks cube A (4 cm) on cube B (5 cm), then cube C (4 cm) on cube A. The three cubes are placed at random
 on the table, at any yaw, within 10 cm of its center in D0 and 20 cm in D1. **Success**: neither cube A nor cube C is
@@ -219,6 +232,8 @@ cube A on cube B, as in `stack-d0`; half, once A is released on B, for stacking 
 
 ### `square-d0`, `square-d1`, `square-d2`
 
+<img src="images/square_d.png" alt="Square D0: the first and last state of demo 0" loading="lazy">
+
 `square` at MimicGen's initial states: a Panda arm slides the square nut down over the square peg. In D0 the nut and
 peg start as in `square`. In D1 the peg stands at random in a 40 cm square and the round peg is removed; the nut starts
 at random in a 23 × 51 cm region, at any yaw, more than 13 cm from the peg. In D2, also without the round peg, the nut
@@ -227,6 +242,8 @@ and the peg each start at random within 25 cm of the table's center in x and y, 
 which add the peg's position. **Dense reward**: as in `square`. **Shaped reward**: robosuite's staged reward.
 
 ### `threading-d0`, `threading-d1`, `threading-d2`
+
+<img src="images/threading.png" alt="Threading D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm threads a needle through the ring of a tripod. In D0 the needle lies at random in a 15 × 10 cm region,
 at a yaw in [−120°, −60°], and the tripod stands at a fixed pose. In D1 the needle lies in a 25 × 10 cm region at a
@@ -237,6 +254,8 @@ position, quaternion, and pose relative to the gripper. **Dense reward**: reachi
 needle, and bringing its bar's center to the ring's.
 
 ### `coffee-d0`, `coffee-d1`, `coffee-d2`
+
+<img src="images/coffee.png" alt="Coffee D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm puts a coffee pod into a coffee machine's pod holder and closes the machine's lid; the lid starts open. In
 D0 the machine stands at a fixed pose and the pod starts at random within a 6 cm square. In D1 the machine stands at
@@ -251,6 +270,8 @@ the pod, reaching it, holding it, lifting it over the holder, and lowering it in
 as held; half for closing the lid once the pod is in.
 
 ### `three-piece-assembly-d0`, `three-piece-assembly-d1`, `three-piece-assembly-d2`
+
+<img src="images/three_piece_assembly.png" alt="Three Piece Assembly D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm drops piece 1, a square slab with a ridge on top, into the square hole of a base frame, then sets piece 2,
 which has a slot between two legs, over piece 1's ridge. In D0 the base lies at the table's center and the two pieces
@@ -268,6 +289,8 @@ half, once piece 1 rests in the base, for piece 2, carried the same way onto pie
 
 ### `hammer-cleanup-d0`, `hammer-cleanup-d1`
 
+<img src="images/hammer_cleanup.png" alt="Hammer Cleanup D0: the first and last state of demo 0" loading="lazy">
+
 A Panda arm pulls a drawer open, puts a hammer into it, and pushes the drawer closed. In D0 the drawer's cabinet stands
 at a fixed pose and the hammer lies at random in an 8 × 7 cm region, its handle along the x axis. In D1 the cabinet
 stands at random in a 20 × 10 cm region, at a yaw in [−30°, 30°], and the hammer lies in a 40 × 12 cm
@@ -281,6 +304,8 @@ within 15 cm above the bottom counting as held; and for reaching the handle and 
 
 ### `mug-cleanup-d0`, `mug-cleanup-d1`
 
+<img src="images/mug_cleanup.png" alt="Mug Cleanup D0: the first and last state of demo 0" loading="lazy">
+
 A Panda arm pulls a drawer open, puts a mug upright into it, and pushes the drawer closed. In D0 the drawer's cabinet
 stands at a fixed pose and the mug at random in a 30 × 15 cm region, at any yaw. In D1 the cabinet stands at random in
 a 20 × 10 cm region, at a yaw in [−30°, 30°], and the mug in a 40 × 15 cm region. **Success**: the drawer is
@@ -292,6 +317,8 @@ bottom, the carrying counting as far as the drawer is open, a mug released withi
 bottom, within 3 cm above resting, counting as held; a quarter, once the mug is in, for reaching the handle and pushing the drawer closed.
 
 ### `kitchen-d0`, `kitchen-d1`
+
+<img src="images/kitchen.png" alt="Kitchen D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm turns on a stove by its button, puts a pot on the stove and a piece of bread in the pot, moves the pot into
 a serving region, and turns the stove off. In D0 the stove, the button, and the serving region are at fixed poses; the
@@ -312,6 +339,8 @@ counts as held.
 
 ### `nut-assembly-d0`
 
+<img src="images/nut_assembly.png" alt="Nut Assembly D0: the first and last state of demo 0" loading="lazy">
+
 A Sawyer arm puts the square nut on the square peg and the round nut on the round peg, the nuts starting as in
 robosuite's NutAssembly. **Success**: each nut is within 3 cm of its peg horizontally, low on the peg, and the gripper
 has let go of it. **Sparse reward**: 0.5 per placed nut. **Object observation** (28): for each nut, the position,
@@ -321,6 +350,8 @@ their pegs and the one other nut furthest along, that one scaled by how upright 
 like the sparse reward.
 
 ### `pick-place-d0`
+
+<img src="images/pick_place.png" alt="Pick Place D0: the first and last state of demo 0" loading="lazy">
 
 A Sawyer arm moves a milk carton, a loaf of bread, a cereal box, and a can from one bin into their compartments of the
 other, the objects starting at random in the first bin at yaws in [0°, 90°]. **Success**: each object is inside its
@@ -332,6 +363,8 @@ standing or not, and the one other object furthest along, that one scaled by how
 scaled like the sparse reward.
 
 ### `coffee-preparation-d0`, `coffee-preparation-d1`
+
+<img src="images/coffee_preparation.png" alt="Coffee Preparation D0: the first and last state of demo 0" loading="lazy">
 
 A Panda arm sets a mug upright on the coffee machine's base plate, opens the machine's lid, pulls a drawer open, takes
 the pod from the drawer, puts it into the pod holder, and closes the lid. The lid and the drawer start closed, and the

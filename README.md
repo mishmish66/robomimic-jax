@@ -8,7 +8,12 @@ robomimic's five tasks (Lift, Can, Square, Transport, Tool Hang) and MimicGen's 
 Three, Square, Threading, Coffee, Three Piece Assembly, Hammer Cleanup, Mug Cleanup, Kitchen, Nut Assembly, Pick
 Place, Coffee Preparation, at their D0 to D2 initial-state distributions) as
 [jax_pomdps](https://github.com/mishmish66/jax-pomdps) POMDPs on MuJoCo Warp, with the human demonstrations of
-every robomimic v1.5 ph and mh dataset, and MimicGen's core datasets of every variant, transferred into them.
+every robomimic v1.5 ph and mh dataset, and MimicGen's core datasets of every variant, re-simulated in them so that
+every demo succeeds. Camera images come from the package's own ray-traced renderer, with shadows and camera
+effects, not from robosuite's OpenGL renderer.
+
+It is no longer a faithful re-implementation of robomimic: the physics, the demonstrations, and the images all
+differ from robomimic's, and it adds MimicGen's tasks. Treat it as its own benchmark.
 
 **[Documentation](https://mishmish66.github.io/robomimic-jax/)**: the tasks, the data, and the API.
 

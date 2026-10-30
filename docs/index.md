@@ -5,9 +5,15 @@
 > the demonstrations is theirs. The robosuite and robomimic parts stay under their MIT licenses
 > (`THIRD_PARTY_NOTICES.md`); only what is new is under the VibeCoded AI-Slop License (`LICENSE`).
 
-robomimic's five simulation tasks, Lift, Can, Square, Transport, and Tool Hang, as
-[jax_pomdps](https://github.com/mishmish66/jax-pomdps) POMDPs simulated by MuJoCo Warp, and the 1200 human
-demonstrations of the robomimic v1.5 datasets, transferred into this simulation so that every one succeeds here.
+robomimic's five simulation tasks, Lift, Can, Square, Transport, and Tool Hang, and MimicGen's 26 task variants,
+as [jax_pomdps](https://github.com/mishmish66/jax-pomdps) POMDPs simulated by MuJoCo Warp, with camera images from
+this package's own renderer. It ships the human demonstrations of every robomimic v1.5 ph and mh dataset and the
+26,000 demonstrations of MimicGen's core datasets, re-simulated here so that every one succeeds.
+
+This is no longer a faithful re-implementation of robomimic. It adds MimicGen's tasks and data, simulates
+everything with different physics, re-simulates every demonstration, and renders camera images of its own that do
+not look like robomimic's. Use it as a set of tasks and datasets in its own right; results on it are not results on
+robomimic.
 
 ```python
 import jax
@@ -25,15 +31,19 @@ obs = jax.jit(jax.vmap(env.observe))(keys, states, None)
   released datasets.
 - `robomimic.scripts`: command-line tools, run as `python -m robomimic.scripts.<name>`.
 
-## What differs from robosuite
+## What differs from robomimic and robosuite
 
 The controller, observations, rewards, and success checks follow robosuite v1.5, which recorded the v1.5
-datasets, and the scenes are robosuite's own models. The physics differ: MuJoCo Warp simulates the tasks with
+datasets, and the MimicGen tasks follow robosuite v1.4, which recorded MimicGen's; the scenes are their own models. The physics differ: MuJoCo Warp simulates the tasks with
 MuJoCo Playground's settings, a 5 ms timestep with implicitfast integration, no kinematics refresh between
 substeps, and no collisions of the arm links (the grippers still collide), with the robosuite models' contact
 solver settings. Recorded robosuite actions therefore do not reproduce their recorded trajectories here, which
-is why the demonstrations are transferred rather than replayed. Camera images come from the MuJoCo Warp ray
-tracer, shaded to approximate robosuite's OpenGL images.
+is why the demonstrations are transferred rather than replayed: each is re-simulated from its first state with
+actions searched to keep it on its recorded trajectory, and the few the search cannot bring to success are
+re-executed from their recorded gripper targets or, for two MimicGen demos, generated anew (see Data). Camera
+images come from the MuJoCo Warp ray tracer with shadows, antialiasing, and a camera's defocus, vignetting, white
+balance, and noise; they do not imitate robosuite's OpenGL images, so the image observations differ from robomimic's
+image datasets (see Tasks).
 
 ## Credits and licenses
 
