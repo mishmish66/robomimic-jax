@@ -21,6 +21,7 @@ import warp as wp
 from robomimic.data import generate, hdf5, registry
 from robomimic.env import PIXELS, TASK_OF_ENV_NAME, TASKS, Pixels, RobomimicPOMDP, parked_joints, registry_name
 from robomimic.env.geometry import ContactTest
+from robomimic.env.pomdp import load_model
 from robomimic.env import render
 from robomimic.env.render import CameraRenderer
 
@@ -332,6 +333,15 @@ def test_camera_depth_matches_dataset_depth(lift_test_dataset):
         assert pixels.dtype == np.uint8 and pixels[..., 3 * i:3 * i + 3].shape == demo["obs"][camera + "_image"][steps].shape
         depth, expected = np.asarray(rendered[camera + "_depth"]), demo["obs"][camera + "_depth"][steps]
         assert np.median(np.abs(depth - expected)) < 0.01, camera
+
+
+@pytest.mark.parametrize("task", sorted(TASKS))
+def test_every_task_loads_with_its_table_top_wood_textured(task):
+    m = load_model(task, wood_table=True)
+    table = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MATERIAL, "table_ceramic")
+    if table >= 0:
+        wood = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_TEXTURE, "table_top_wood")
+        assert m.mat_texid[table, mujoco.mjtTextureRole.mjTEXROLE_RGB] == wood >= 0
 
 
 def test_table_top_pixels_reconstruct_onto_its_top_face_and_show_its_texture():

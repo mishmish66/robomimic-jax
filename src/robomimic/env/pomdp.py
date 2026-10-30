@@ -184,9 +184,9 @@ TASK_OF_ENV_NAME = {s["env_name"]: t for t, s in _specs().items()}
 
 def _wood_table(model_xml: str) -> str:
     """`model_xml` with its table top textured dark wood."""
-    texture = '<texture type="2d" name="tex-dark-wood" file="models/assets/textures/dark-wood.png"/>'
-    model_xml = re.sub(r'(<material\b[^>]*\bname="table_ceramic"[^>]*\btexture=)"[^"]*"', r'\1"tex-dark-wood"', model_xml)
-    return re.sub(r"<asset>", "<asset>" + texture, model_xml, count=1) if "tex-dark-wood" in model_xml else model_xml
+    texture = '<texture type="2d" name="table_top_wood" file="models/assets/textures/dark-wood.png"/>'
+    model_xml = re.sub(r'(<material\b[^>]*\bname="table_ceramic"[^>]*\btexture=)"[^"]*"', r'\1"table_top_wood"', model_xml)
+    return re.sub(r"<asset>", "<asset>" + texture, model_xml, count=1) if "table_top_wood" in model_xml else model_xml
 
 
 def load_model(task: str | None = None, model_xml: str | None = None, wood_table: bool = False) -> mujoco.MjModel:
