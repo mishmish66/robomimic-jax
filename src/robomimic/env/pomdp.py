@@ -54,8 +54,8 @@ _BUFFER_OVERFLOWS = int(
     OverflowType.NEFC | OverflowType.NJMAX_NNZ | OverflowType.BROADPHASE
     | OverflowType.NARROWPHASE | OverflowType.CCD | OverflowType.EPA_HORIZON
 )
-# simulation timestep, as in MuJoCo Playground; each 50 ms control step is 10 substeps
-_TIMESTEP = 0.005
+# simulation timestep, robosuite's; each 50 ms control step is 25 substeps, the controllers updating at every one
+_TIMESTEP = 0.002
 # default (contacts, constraint rows) allocated per world, at least twice the measured peaks
 _BUFFER_SIZES = {
     "lift": (32, 256),
@@ -248,8 +248,8 @@ def _park(m, qpos):
 
 def _simulated(m):
     """
-    Copy of `m` as MuJoCo Warp simulates it, with MuJoCo Playground's simulation settings: the `_TIMESTEP` step,
-    implicitfast integration, and no collisions of the robot arms and mounts (the grippers still collide); mesh geoms
+    Copy of `m` as MuJoCo Warp simulates it: the `_TIMESTEP` step, implicitfast integration, and no collisions of the
+    robot arms and mounts (the grippers still collide); mesh geoms
     lose their contact margins, which MuJoCo Warp's multi-contact mesh collisions do not support.
     """
     m = deepcopy(m)
